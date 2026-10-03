@@ -80,7 +80,7 @@ jobs:
       - name: Verify Release Assets
         shell: pwsh
         run: |
-          Get-ChildItem -Path "dist" -Filter "*.exe", "*.zip" | Select-Object Name, Length
+          Get-ChildItem -Path "dist" | Where-Object { $_.Extension -in '.exe', '.zip' } | Select-Object Name, Length
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
