@@ -78,6 +78,12 @@ class Theme:
         color: #94a3b8;
         font-size: 12px;
     }
+    QLabel#FooterCredit {
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 500;
+        padding-right: 4px;
+    }
     QLabel#Badge {
         background-color: #272a38;
         color: #38bdf8;
@@ -546,6 +552,12 @@ class Theme:
     QLabel#MutedLabel {
         color: #64748b;
         font-size: 12px;
+    }
+    QLabel#FooterCredit {
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 500;
+        padding-right: 4px;
     }
     QLabel#Badge {
         background-color: #e0f2fe;

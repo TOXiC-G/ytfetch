@@ -189,6 +189,17 @@ class MainWindow(QMainWindow):
 
         root_layout.addWidget(self.tabs, 1)
 
+        # 4. Footer Bar (Bottom Right Credit)
+        footer = QHBoxLayout()
+        footer.setContentsMargins(4, 2, 4, 0)
+        footer.addStretch()
+
+        self.lbl_credit = QLabel("By Nathan Latino Henriques")
+        self.lbl_credit.setObjectName("FooterCredit")
+        footer.addWidget(self.lbl_credit)
+
+        root_layout.addLayout(footer)
+
     def _show_playlist_inspector(self):
         self.downloader_stack.setCurrentIndex(1)
 
