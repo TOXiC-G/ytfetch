@@ -1,5 +1,6 @@
 import sys
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -8,7 +9,7 @@ import requests
 from packaging import version
 
 
-CURRENT_VERSION = "1.0.4"
+CURRENT_VERSION = "1.0.5"
 GITHUB_REPO = "TOXiC-G/ytfetch"
 
 
@@ -16,6 +17,34 @@ class AppUpdater:
     @staticmethod
     def get_current_version() -> str:
         return CURRENT_VERSION
+
+    @classmethod
+    def is_installed_app(cls) -> bool:
+        """
+        Check if running from an Inno Setup installed location
+        (unins*.exe in parent directory or running in Program Files).
+        """
+        if not getattr(sys, "frozen", False):
+            return False
+
+        try:
+            current_exe = Path(sys.executable).resolve()
+            exe_dir = current_exe.parent
+
+            # 1. Inno Setup creates uninstaller (unins000.exe) in the app directory
+            if list(exe_dir.glob("unins*.exe")):
+                return True
+
+            # 2. Check standard Program Files directories
+            prog_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+            prog_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
+            exe_str = str(current_exe).lower()
+            if exe_str.startswith(prog_files.lower()) or exe_str.startswith(prog_files_x86.lower()):
+                return True
+        except Exception:
+            pass
+
+        return False
 
     @classmethod
     def check_for_app_update(cls) -> Tuple[bool, str, str, str]:
@@ -36,7 +65,6 @@ class AppUpdater:
                 tag = data.get("tag_name", "").lstrip("v")
                 body = data.get("body", "No release notes provided.")
 
-                # Look for executable asset: prefer portable for direct in-place update, otherwise setup
                 download_url = ""
                 portable_url = ""
                 setup_url = ""
@@ -44,14 +72,20 @@ class AppUpdater:
                     name = asset.get("name", "").lower()
                     url = asset.get("browser_download_url", "")
                     if name.endswith(".exe"):
-                        if "portable" in name:
-                            portable_url = url
-                        elif "setup" in name or "installer" in name:
+                        if "setup" in name or "installer" in name:
                             setup_url = url
+                        elif "portable" in name:
+                            portable_url = url
                         elif not download_url:
                             download_url = url
 
-                download_url = portable_url or setup_url or download_url
+                # Choose appropriate asset based on install type
+                if cls.is_installed_app():
+                    # For installed app, setup is preferred so Inno Setup can update files cleanly with UAC elevation
+                    download_url = setup_url or download_url or portable_url
+                else:
+                    # For portable app, portable is preferred for in-place replacement
+                    download_url = portable_url or download_url or setup_url
 
                 if tag:
                     try:
@@ -60,7 +94,7 @@ class AppUpdater:
                     except Exception:
                         if tag != CURRENT_VERSION:
                             return True, tag, download_url, body
-        except Exception as e:
+        except Exception:
             # Silent failure during background check
             pass
 
@@ -74,7 +108,7 @@ class AppUpdater:
         progress_callback: Optional[Callable[[int, str], None]] = None
     ) -> Tuple[bool, str]:
         """
-        Downloads the new executable and schedules restart.
+        Downloads the new binary and schedules restart without flashing console windows or infinite loops.
         """
         if not download_url:
             return False, "No downloadable binary found in the latest release."
@@ -82,7 +116,10 @@ class AppUpdater:
         try:
             temp_dir = Path(tempfile.gettempdir()) / "ytfetch_update"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            new_exe = temp_dir / f"ytfetch-{target_version}.exe"
+
+            is_installer = ("setup" in download_url.lower() or "installer" in download_url.lower())
+            filename = f"ytfetch-v{target_version}-setup.exe" if is_installer else f"ytfetch-v{target_version}-portable.exe"
+            new_exe = temp_dir / filename
 
             headers = {
                 "User-Agent": f"ytfetch-desktop/{CURRENT_VERSION}"
@@ -107,34 +144,104 @@ class AppUpdater:
             if not new_exe.exists() or new_exe.stat().st_size < 1000:
                 return False, "Downloaded file appears incomplete or corrupt."
 
-            # If running as compiled exe, launch updater batch script
+            # If running as compiled exe, launch updater PowerShell script
             if getattr(sys, "frozen", False):
                 current_exe = Path(sys.executable).resolve()
-                bat_script = temp_dir / "update_restart.bat"
-                
-                # Script waits for current process to release the file lock, moves new exe over, launches it, and self-deletes
-                bat_content = f"""@echo off
-timeout /t 1 /nobreak >nul
-:retry
-move /y "{new_exe}" "{current_exe}" >nul 2>&1
-if errorlevel 1 (
-    timeout /t 1 /nobreak >nul
-    goto retry
-)
-start "" "{current_exe}"
-del "%~f0"
-"""
-                with open(bat_script, "w", encoding="utf-8") as bf:
-                    bf.write(bat_content)
+                current_pid = os.getpid()
+                ps_script = temp_dir / "update_runner.ps1"
 
-                # Launch detached batch
+                # PowerShell script handles both installer and portable replacements cleanly and silently
+                # Escaping single quotes for PowerShell literal strings
+                esc_new_exe = str(new_exe).replace("'", "''")
+                esc_current_exe = str(current_exe).replace("'", "''")
+                is_installer_flag = "$true" if is_installer else "$false"
+
+                ps_content = f"""# ytfetch updater runner
+$ErrorActionPreference = 'SilentlyContinue'
+$targetPid = {current_pid}
+$newExe = '{esc_new_exe}'
+$currentExe = '{esc_current_exe}'
+$isInstaller = {is_installer_flag}
+
+# 1. Wait for parent process to exit (timeout 10s)
+try {{
+    $proc = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
+    if ($proc) {{
+        $proc.WaitForExit(10000)
+    }}
+}} catch {{}}
+
+if ($isInstaller) {{
+    # Installed App: Run installer with elevation (UAC prompt)
+    try {{
+        $installProc = Start-Process -FilePath $newExe -ArgumentList "/SILENT /CLOSEAPPLICATIONS" -Verb RunAs -PassThru -Wait
+        if (Test-Path $currentExe) {{
+            Start-Process -FilePath $currentExe
+        }}
+    }} catch {{
+        # If UAC declined or failed, relaunch original app
+        if (Test-Path $currentExe) {{
+            Start-Process -FilePath $currentExe
+        }}
+    }}
+}} else {{
+    # Portable App: Replace current executable in-place with bounded retries (max 15 attempts / ~4.5s)
+    $replaced = $false
+    for ($i = 0; $i -lt 15; $i++) {{
+        try {{
+            Move-Item -Path $newExe -Destination $currentExe -Force -ErrorAction Stop
+            $replaced = $true
+            break
+        }} catch {{
+            Start-Sleep -Milliseconds 300
+        }}
+    }}
+    
+    # If direct Move-Item failed (e.g. permission restriction), attempt with elevation
+    if (-not $replaced) {{
+        try {{
+            $cmd = "Move-Item -Path '$newExe' -Destination '$currentExe' -Force"
+            Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command $cmd" -Verb RunAs -Wait
+            if (Test-Path $currentExe) {{
+                $replaced = $true
+            }}
+        }} catch {{}}
+    }}
+    
+    # Relaunch application
+    if (Test-Path $currentExe) {{
+        Start-Process -FilePath $currentExe
+    }}
+}}
+"""
+                with open(ps_script, "w", encoding="utf-8") as pf:
+                    pf.write(ps_content)
+
+                # Locate PowerShell binary reliably
+                pwsh = shutil.which("powershell")
+                if not pwsh:
+                    sys_root = os.environ.get("SystemRoot", "C:\\Windows")
+                    pwsh = os.path.join(sys_root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+
+                # Launch detached and completely hidden (NO window flashing)
+                CREATE_NO_WINDOW = 0x08000000
+                DETACHED_PROCESS = 0x00000008
+                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                flags = CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+
                 subprocess.Popen(
-                    ["cmd.exe", "/c", str(bat_script)],
-                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+                    [
+                        pwsh,
+                        "-NoProfile",
+                        "-WindowStyle", "Hidden",
+                        "-ExecutionPolicy", "Bypass",
+                        "-File", str(ps_script)
+                    ],
+                    creationflags=flags
                 )
                 return True, "RESTART_READY"
             else:
-                # In python source / dev mode
+                # In development mode
                 return True, f"Downloaded update to {new_exe}. In development mode, please run git pull or execute the new binary."
 
         except Exception as e:

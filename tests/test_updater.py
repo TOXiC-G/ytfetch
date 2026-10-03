@@ -16,6 +16,13 @@ class TestAppUpdater(unittest.TestCase):
         self.assertIsInstance(is_newer, bool)
         self.assertIsInstance(tag, str)
 
+    def test_is_installed_app(self):
+        # In non-frozen test runner environment, is_installed_app should be False
+        self.assertFalse(AppUpdater.is_installed_app())
+
+    def test_current_version_matches(self):
+        self.assertEqual(AppUpdater.get_current_version(), "1.0.5")
+
 
 if __name__ == "__main__":
     unittest.main()

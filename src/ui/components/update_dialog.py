@@ -1,8 +1,9 @@
 import sys
+import os
 import threading
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QProgressBar, QMessageBox
+    QTextEdit, QProgressBar, QMessageBox, QApplication
 )
 from PySide6.QtCore import Qt, Signal, QObject
 
@@ -125,7 +126,8 @@ class UpdateDialog(QDialog):
         if ok:
             if msg == "RESTART_READY":
                 self.status_lbl.setText("Restarting ytfetch...")
-                sys.exit(0)
+                QApplication.quit()
+                os._exit(0)
             else:
                 QMessageBox.information(self, "Update Downloaded", msg)
                 self.accept()
