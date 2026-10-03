@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QWidget
+    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QWidget
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QImage
@@ -8,13 +8,15 @@ from typing import Dict, Any, Optional
 
 
 class PreviewCard(QFrame):
-    mode_changed = Signal(str)  # "video" or "playlist"
+    inspect_playlist_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("PreviewCard")
         self.net_manager = QNetworkAccessManager(self)
         self.current_metadata: Optional[Dict[str, Any]] = None
+        self.total_playlist_count = 0
+        self.selected_playlist_count = 0
         self._setup_ui()
         self.setVisible(False)
 
@@ -23,9 +25,9 @@ class PreviewCard(QFrame):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(16)
 
-        # Thumbnail Label
+        # Thumbnail Label (16:9)
         self.thumb_label = QLabel()
-        self.thumb_label.setFixedSize(180, 101)  # 16:9 ratio
+        self.thumb_label.setFixedSize(180, 101)
         self.thumb_label.setStyleSheet("""
             QLabel {
                 background-color: #0b0c10;
@@ -37,20 +39,18 @@ class PreviewCard(QFrame):
         self.thumb_label.setText("No Thumbnail")
         layout.addWidget(self.thumb_label)
 
-        # Info Layout
+        # Middle: Info Layout
         info_layout = QVBoxLayout()
-        info_layout.setSpacing(6)
+        info_layout.setSpacing(8)
 
-        # Video Title: Uses objectName PreviewTitle so theme stylesheet colors it properly in both Dark and Light mode
         self.title_label = QLabel("Media Title")
         self.title_label.setObjectName("PreviewTitle")
         self.title_label.setWordWrap(True)
 
-        # Badges row (Channel, Duration, Views)
+        # Badges row (Channel, Duration, Views, Size)
         meta_row = QHBoxLayout()
         meta_row.setSpacing(8)
 
-        # Channel label: Uses objectName PreviewUploader for theme adaptive color
         self.uploader_label = QLabel("Channel")
         self.uploader_label.setObjectName("PreviewUploader")
 
@@ -71,34 +71,31 @@ class PreviewCard(QFrame):
 
         info_layout.addWidget(self.title_label)
         info_layout.addLayout(meta_row)
-
-        # Mode Selection Row (for playlist links that also point to a video)
-        self.mode_container = QWidget()
-        mode_layout = QHBoxLayout(self.mode_container)
-        mode_layout.setContentsMargins(0, 4, 0, 0)
-        mode_layout.setSpacing(12)
-
-        mode_desc = QLabel("Mode:")
-        mode_desc.setObjectName("MutedLabel")
-        
-        self.btn_group = QButtonGroup(self)
-        self.radio_single = QRadioButton("Single Video")
-        self.radio_playlist = QRadioButton("Full Playlist")
-        self.btn_group.addButton(self.radio_single)
-        self.btn_group.addButton(self.radio_playlist)
-        self.radio_single.setChecked(True)
-
-        self.radio_single.toggled.connect(self._on_mode_toggled)
-
-        mode_layout.addWidget(mode_desc)
-        mode_layout.addWidget(self.radio_single)
-        mode_layout.addWidget(self.radio_playlist)
-        mode_layout.addStretch()
-
-        info_layout.addWidget(self.mode_container)
-        self.mode_container.setVisible(False)
+        info_layout.addStretch()
 
         layout.addLayout(info_layout, 1)
+
+        # Right Side: Inspect Playlist Action Button (placed in the red box area)
+        self.right_container = QWidget()
+        right_layout = QVBoxLayout(self.right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.btn_inspect = QPushButton("Inspect Playlist →")
+        self.btn_inspect.setObjectName("SecondaryAccentButton")
+        self.btn_inspect.setStyleSheet("""
+            QPushButton {
+                font-size: 13px;
+                font-weight: 700;
+                padding: 10px 18px;
+                border-radius: 8px;
+            }
+        """)
+        self.btn_inspect.clicked.connect(self.inspect_playlist_requested.emit)
+        self.btn_inspect.setVisible(False)
+
+        right_layout.addWidget(self.btn_inspect)
+        layout.addWidget(self.right_container)
 
     def set_metadata(self, data: Dict[str, Any]):
         self.current_metadata = data
@@ -112,26 +109,26 @@ class PreviewCard(QFrame):
         self.uploader_label.setText(f"👤 {uploader}")
 
         if is_playlist:
-            count = data.get("entries_count", 0)
-            self.duration_badge.setText(f"📑 {count} videos")
+            self.total_playlist_count = data.get("entries_count", 0)
+            self.selected_playlist_count = self.total_playlist_count
+            self.duration_badge.setText(f"📑 {self.total_playlist_count} videos")
             self.views_badge.setVisible(False)
-            self.size_badge.setText("Playlist Preview")
-            self.mode_container.setVisible(False)
+            self.size_badge.setText("Playlist")
+            
+            # Show the Inspect Playlist button
+            self.btn_inspect.setText(f"Inspect Playlist ({self.total_playlist_count}) →")
+            self.btn_inspect.setVisible(True)
         else:
             self.duration_badge.setText(f"⏱ {data.get('duration_formatted', '00:00')}")
             self.views_badge.setVisible(True)
             self.views_badge.setText(f"👁 {data.get('view_count_formatted', '')}")
+            self.btn_inspect.setVisible(False)
             
             # Estimated size from best video quality
             best_size_str = "Auto size"
             if data.get("video_qualities"):
                 best_size_str = data["video_qualities"][0].get("filesize_formatted", "Auto size")
             self.size_badge.setText(f"💾 {best_size_str}")
-
-            if "playlist_entries" in data or data.get("is_playlist_member"):
-                self.mode_container.setVisible(True)
-            else:
-                self.mode_container.setVisible(False)
 
         # Load thumbnail
         thumb_url = data.get("thumbnail")
@@ -140,8 +137,19 @@ class PreviewCard(QFrame):
         else:
             self.thumb_label.setText("No Thumbnail")
 
+    def update_selection_count(self, selected_count: int, total_count: int):
+        self.selected_playlist_count = selected_count
+        self.total_playlist_count = total_count
+        if selected_count == total_count:
+            self.duration_badge.setText(f"📑 {total_count} videos")
+            self.btn_inspect.setText(f"Inspect Playlist ({total_count}) →")
+        else:
+            self.duration_badge.setText(f"📑 {selected_count} of {total_count} selected")
+            self.btn_inspect.setText(f"Selected: {selected_count}/{total_count} →")
+
     def update_estimated_size(self, size_str: str):
-        self.size_badge.setText(f"💾 {size_str}")
+        if self.current_metadata and self.current_metadata.get("type") != "playlist":
+            self.size_badge.setText(f"💾 {size_str}")
 
     def _load_thumbnail(self, url: str):
         self.thumb_label.setText("Loading...")
@@ -166,7 +174,3 @@ class PreviewCard(QFrame):
         else:
             self.thumb_label.setText("No Preview")
         reply.deleteLater()
-
-    def _on_mode_toggled(self, checked: bool):
-        mode = "video" if self.radio_single.isChecked() else "playlist"
-        self.mode_changed.emit(mode)

@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox,
@@ -19,6 +20,8 @@ class OptionsPanel(QFrame):
         super().__init__(parent)
         self.setObjectName("OptionsCard")
         self.current_metadata: Optional[Dict[str, Any]] = None
+        self.is_playlist = False
+        self.selected_item_count = 1
         self._setup_ui()
 
     def _setup_ui(self):
@@ -66,13 +69,13 @@ class OptionsPanel(QFrame):
         self.chk_thumb = QCheckBox("Embed Artwork")
         self.chk_thumb.setChecked(True)
 
-        self.chk_meta = QCheckBox("Embed Metadata & Tags")
+        self.chk_meta = QCheckBox("Embed Metadata Tags")
         self.chk_meta.setChecked(True)
 
         self.chk_subs = QCheckBox("Embed Subtitles")
         self.chk_subs.setChecked(False)
 
-        self.chk_chapters = QCheckBox("Split by Chapters")
+        self.chk_chapters = QCheckBox("Split Chapters")
         self.chk_chapters.setChecked(False)
         self.chk_chapters.setEnabled(False)
 
@@ -117,7 +120,26 @@ class OptionsPanel(QFrame):
         self.snip_container.setVisible(False)
         layout.addWidget(self.snip_container)
 
-        # 4. Save Location & Actions Row
+        # 4. Playlist Subfolder Selection Row (Clean & defaulted to True when playlist)
+        self.playlist_folder_container = QWidget()
+        pl_folder_layout = QHBoxLayout(self.playlist_folder_container)
+        pl_folder_layout.setContentsMargins(0, 0, 0, 0)
+        pl_folder_layout.setSpacing(10)
+
+        self.chk_playlist_folder = QCheckBox("Save into playlist folder:")
+        self.chk_playlist_folder.setChecked(True)
+        self.chk_playlist_folder.toggled.connect(self._on_playlist_folder_toggled)
+
+        self.folder_name_edit = QLineEdit("Playlist")
+        self.folder_name_edit.setPlaceholderText("Folder name")
+
+        pl_folder_layout.addWidget(self.chk_playlist_folder)
+        pl_folder_layout.addWidget(self.folder_name_edit, 1)
+
+        self.playlist_folder_container.setVisible(False)
+        layout.addWidget(self.playlist_folder_container)
+
+        # 5. Save Location & Actions Row
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(10)
 
@@ -125,7 +147,7 @@ class OptionsPanel(QFrame):
         loc_lbl.setObjectName("MutedLabel")
 
         cfg = AppConfig.get_instance()
-        default_dir = cfg.get("download_path", str(Path.home() / "Downloads" / "ApexLoad"))
+        default_dir = cfg.get("download_path", str(Path.home() / "Downloads" / "ytfetch"))
 
         self.path_edit = QLineEdit(default_dir)
         self.path_edit.setReadOnly(True)
@@ -137,7 +159,8 @@ class OptionsPanel(QFrame):
         self.btn_queue.setObjectName("SecondaryAccentButton")
         self.btn_queue.clicked.connect(self._on_queue_clicked)
 
-        self.btn_download = QPushButton("⬇ Download Now")
+        # Clean, modern download button without cheap emoji
+        self.btn_download = QPushButton("Download Now")
         self.btn_download.setObjectName("PrimaryButton")
         self.btn_download.clicked.connect(self._on_download_clicked)
 
@@ -149,11 +172,33 @@ class OptionsPanel(QFrame):
 
         layout.addLayout(bottom_row)
 
-        # Initialize combo formats
         self._populate_video_options()
 
     def set_metadata(self, data: Dict[str, Any]):
         self.current_metadata = data
+        self.is_playlist = (data.get("type") == "playlist")
+
+        if self.is_playlist:
+            count = data.get("entries_count", 0)
+            self.selected_item_count = count
+            self.playlist_folder_container.setVisible(True)
+            self.chk_playlist_folder.setChecked(True)
+
+            # Default folder name to playlist title or first video title
+            folder_title = data.get("title", "")
+            if not folder_title or folder_title == "YouTube Playlist":
+                entries = data.get("entries", [])
+                if entries:
+                    folder_title = entries[0].get("title", "Playlist")
+            
+            clean_name = self._sanitize_folder_name(folder_title)
+            self.folder_name_edit.setText(clean_name or "Playlist")
+            self._update_button_labels()
+        else:
+            self.playlist_folder_container.setVisible(False)
+            self.selected_item_count = 1
+            self._update_button_labels()
+
         chapters = data.get("chapters", [])
         if chapters:
             self.chk_chapters.setEnabled(True)
@@ -163,8 +208,27 @@ class OptionsPanel(QFrame):
             self.chk_chapters.setText("Split Chapters")
             self.chk_chapters.setChecked(False)
 
-        # Update options lists according to actual available streams
         self._on_type_changed(self.combo_type.currentIndex())
+
+    def update_selected_count(self, count: int):
+        self.selected_item_count = count
+        self._update_button_labels()
+
+    def _update_button_labels(self):
+        if self.is_playlist:
+            self.btn_download.setText(f"Download Now ({self.selected_item_count})")
+            self.btn_queue.setText(f"+ Add to Queue ({self.selected_item_count})")
+        else:
+            self.btn_download.setText("Download Now")
+            self.btn_queue.setText("+ Add to Queue")
+
+    def _sanitize_folder_name(self, name: str) -> str:
+        # Strip invalid Windows filename characters: \ / : * ? " < > |
+        cleaned = re.sub(r'[\\/*?:"<>|]', '', name).strip()
+        return cleaned[:80] if len(cleaned) > 80 else cleaned
+
+    def _on_playlist_folder_toggled(self, checked: bool):
+        self.folder_name_edit.setEnabled(checked)
 
     def _on_type_changed(self, index: int):
         is_video = (index == 0)
@@ -250,11 +314,19 @@ class OptionsPanel(QFrame):
         else:
             quality_choice = qdata.get("bitrate", "320k")
 
+        base_save_path = self.path_edit.text().strip()
+        # If playlist and subfolder is checked, nest path into folder
+        if self.is_playlist and self.chk_playlist_folder.isChecked():
+            subfolder = self._sanitize_folder_name(self.folder_name_edit.text().strip()) or "Playlist"
+            final_save_path = os.path.join(base_save_path, subfolder)
+        else:
+            final_save_path = base_save_path
+
         return {
             "media_type": "video" if is_video else "audio",
             "format_choice": self.combo_format.currentText().lower(),
             "quality_choice": quality_choice,
-            "save_path": self.path_edit.text().strip(),
+            "save_path": final_save_path,
             "embed_thumbnail": self.chk_thumb.isChecked(),
             "embed_metadata": self.chk_meta.isChecked(),
             "embed_subtitles": self.chk_subs.isChecked() if is_video else False,
