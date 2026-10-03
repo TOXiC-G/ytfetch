@@ -108,21 +108,24 @@ class URLInputBar(QWidget):
         self.poll_timer.start()
 
     def check_clipboard(self):
-        cfg = AppConfig.get_instance()
-        if not cfg.get("auto_detect_clipboard", True):
-            return
+        try:
+            cfg = AppConfig.get_instance()
+            if not cfg.get("auto_detect_clipboard", True):
+                return
 
-        text = self.clipboard.text().strip()
-        if not text or text == self.last_clipboard_url:
-            return
+            text = self.clipboard.text().strip()
+            if not text or text == self.last_clipboard_url:
+                return
 
-        if URLSanitizer.is_youtube_url(text):
-            if text != self.url_edit.text().strip():
-                self.last_clipboard_url = text
-                # Shorten display link for banner
-                display_link = text if len(text) <= 50 else text[:47] + "..."
-                self.banner_text.setText(f"YouTube link detected: {display_link}")
-                self.banner.setVisible(True)
+            if URLSanitizer.is_youtube_url(text):
+                if text != self.url_edit.text().strip():
+                    self.last_clipboard_url = text
+                    # Shorten display link for banner
+                    display_link = text if len(text) <= 50 else text[:47] + "..."
+                    self.banner_text.setText(f"YouTube link detected: {display_link}")
+                    self.banner.setVisible(True)
+        except Exception:
+            pass
 
     def _on_banner_paste_clicked(self):
         if self.last_clipboard_url:
