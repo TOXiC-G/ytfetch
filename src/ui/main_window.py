@@ -52,6 +52,12 @@ class MainWindow(QMainWindow):
         self.current_metadata: Optional[Dict[str, Any]] = None
         self.thread_pool = QThreadPool.globalInstance()
 
+        icon_path = Path(__file__).resolve().parent.parent / "assets" / "ytfetch.ico"
+        if not icon_path.exists():
+            icon_path = Path(__file__).resolve().parent.parent / "assets" / "ytfetch.png"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+
         self.update_detected.connect(self._on_update_detected)
         self.pending_update_data: Optional[Dict[str, str]] = None
 

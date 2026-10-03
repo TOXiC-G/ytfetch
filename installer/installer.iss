@@ -2,7 +2,7 @@
 ; Generates standard Windows installer with Start Menu and Desktop shortcuts
 
 #ifndef MyAppVersion
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #endif
 
 #define MyAppName "ytfetch"

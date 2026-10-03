@@ -24,17 +24,25 @@ def create_default_icon() -> QIcon:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
 
-    # Background circle with gradient
-    painter.setBrush(QColor("#e11d48"))
+    # YouTube red badge
+    painter.setBrush(QColor("#FF0000"))
     painter.setPen(Qt.NoPen)
-    painter.drawRoundedRect(4, 4, 120, 120, 28, 28)
+    painter.drawRoundedRect(8, 20, 112, 88, 24, 24)
 
-    # Lightning bolt symbol
+    # Downward download arrow + dock bar
     painter.setBrush(QColor("#ffffff"))
-    font = QFont("Segoe UI", 56, QFont.Bold)
-    painter.setFont(font)
-    painter.setPen(QColor("#ffffff"))
-    painter.drawText(pixmap.rect(), Qt.AlignCenter, "⚡")
+    # Arrow shaft
+    painter.drawRoundedRect(56, 36, 16, 26, 3, 3)
+    # Arrow head
+    from PySide6.QtGui import QPainterPath
+    head = QPainterPath()
+    head.moveTo(38, 58)
+    head.lineTo(90, 58)
+    head.lineTo(64, 82)
+    head.closeSubpath()
+    painter.fillPath(head, QColor("#ffffff"))
+    # Dock bar
+    painter.drawRoundedRect(42, 88, 44, 8, 3, 3)
     painter.end()
 
     return QIcon(pixmap)
@@ -63,14 +71,17 @@ def main():
     # Set icon
     icon_path = Path(__file__).resolve().parent / "assets" / "ytfetch.ico"
     if not icon_path.exists():
-        icon_path = Path(__file__).resolve().parent / "assets" / "apexload.ico"
+        icon_path = Path(__file__).resolve().parent / "assets" / "ytfetch.png"
 
     if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
+        app_icon = QIcon(str(icon_path))
     else:
-        app.setWindowIcon(create_default_icon())
+        app_icon = create_default_icon()
+
+    app.setWindowIcon(app_icon)
 
     window = MainWindow()
+    window.setWindowIcon(app_icon)
     window.show()
 
     sys.exit(app.exec())
