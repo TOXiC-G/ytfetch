@@ -20,8 +20,8 @@ class HistoryWidget(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
 
         # Header bar
         header = QHBoxLayout()
@@ -35,9 +35,11 @@ class HistoryWidget(QWidget):
         self.search_edit.setMaximumWidth(220)
 
         self.btn_refresh = QPushButton("⟳ Refresh")
+        self.btn_refresh.setObjectName("QueueActionBtn")
         self.btn_refresh.clicked.connect(self.refresh)
 
         self.btn_clear = QPushButton("Clear History")
+        self.btn_clear.setObjectName("QueueActionBtn")
         self.btn_clear.clicked.connect(self._on_clear_clicked)
 
         header.addWidget(self.title_lbl)
@@ -58,8 +60,11 @@ class HistoryWidget(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
+
+        # Crucial for preventing button text clipping: give rows sufficient height
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(46)
 
         layout.addWidget(self.table, 1)
 
@@ -71,7 +76,8 @@ class HistoryWidget(QWidget):
             # Title
             title_text = entry.get("title", "Untitled")
             title_item = QTableWidgetItem(title_text)
-            title_item.setFlags(Qt.ItemIsEnabled)
+            title_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            title_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             self.table.setItem(row, 0, title_item)
 
             # Format
@@ -100,22 +106,28 @@ class HistoryWidget(QWidget):
             # Action Buttons Widget
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(4, 2, 4, 2)
+            actions_layout.setContentsMargins(6, 4, 6, 4)
             actions_layout.setSpacing(6)
+            actions_layout.setAlignment(Qt.AlignCenter)
 
             file_path = entry.get("file_path", "")
             exists = entry.get("exists", False)
 
             btn_open = QPushButton("▶ Open")
+            btn_open.setObjectName("TableActionBtnOpen")
             btn_open.setEnabled(exists)
+            btn_open.setToolTip("Open file with default player" if exists else "File no longer exists on disk")
             btn_open.clicked.connect(lambda _, fp=file_path: HistoryManager.open_file(fp))
 
             btn_folder = QPushButton("📁 Folder")
+            btn_folder.setObjectName("TableActionBtnFolder")
             btn_folder.setEnabled(exists)
+            btn_folder.setToolTip("Reveal in Windows Explorer" if exists else "File no longer exists on disk")
             btn_folder.clicked.connect(lambda _, fp=file_path: HistoryManager.open_folder(fp))
 
             btn_del = QPushButton("✕")
-            btn_del.setToolTip("Delete from history")
+            btn_del.setObjectName("TableActionBtnDelete")
+            btn_del.setToolTip("Delete from history records")
             entry_id = entry.get("id")
             btn_del.clicked.connect(lambda _, eid=entry_id: self._on_delete_entry(eid))
 

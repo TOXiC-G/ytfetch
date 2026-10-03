@@ -33,12 +33,15 @@ class PlaylistView(QWidget):
         self.search_edit.setMaximumWidth(250)
 
         self.btn_select_all = QPushButton("Select All")
+        self.btn_select_all.setObjectName("QueueActionBtn")
         self.btn_select_all.clicked.connect(self._select_all)
 
         self.btn_deselect_all = QPushButton("Deselect All")
+        self.btn_deselect_all.setObjectName("QueueActionBtn")
         self.btn_deselect_all.clicked.connect(self._deselect_all)
 
         self.btn_invert = QPushButton("Invert")
+        self.btn_invert.setObjectName("QueueActionBtn")
         self.btn_invert.clicked.connect(self._invert_selection)
 
         top_bar.addWidget(self.info_label)
@@ -61,6 +64,7 @@ class PlaylistView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setShowGrid(False)
 
         layout.addWidget(self.table, 1)

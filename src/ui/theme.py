@@ -228,10 +228,74 @@ class Theme:
         padding: 4px 10px;
         font-size: 11px;
         font-weight: 600;
+        min-height: 24px;
     }
     QPushButton#QueueActionBtn:hover {
         background-color: #2c3246;
         border-color: #49516d;
+        color: #ffffff;
+    }
+
+    /* Table & Inline Action Buttons */
+    QPushButton#TableActionBtnOpen {
+        background-color: rgba(56, 189, 248, 0.12);
+        color: #38bdf8;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 10px;
+        min-height: 24px;
+        max-height: 26px;
+    }
+    QPushButton#TableActionBtnOpen:hover {
+        background-color: rgba(56, 189, 248, 0.25);
+        border-color: #38bdf8;
+        color: #ffffff;
+    }
+    QPushButton#TableActionBtnOpen:disabled {
+        background-color: rgba(100, 116, 139, 0.1);
+        color: #64748b;
+        border-color: rgba(100, 116, 139, 0.2);
+    }
+
+    QPushButton#TableActionBtnFolder {
+        background-color: rgba(234, 179, 8, 0.12);
+        color: #fbbf24;
+        border: 1px solid rgba(234, 179, 8, 0.3);
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 10px;
+        min-height: 24px;
+        max-height: 26px;
+    }
+    QPushButton#TableActionBtnFolder:hover {
+        background-color: rgba(234, 179, 8, 0.25);
+        border-color: #fbbf24;
+        color: #ffffff;
+    }
+    QPushButton#TableActionBtnFolder:disabled {
+        background-color: rgba(100, 116, 139, 0.1);
+        color: #64748b;
+        border-color: rgba(100, 116, 139, 0.2);
+    }
+
+    QPushButton#TableActionBtnDelete {
+        background-color: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.25);
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 8px;
+        min-height: 24px;
+        max-height: 26px;
+        min-width: 24px;
+    }
+    QPushButton#TableActionBtnDelete:hover {
+        background-color: rgba(239, 68, 68, 0.25);
+        border-color: #f87171;
         color: #ffffff;
     }
 
@@ -592,11 +656,75 @@ class Theme:
         padding: 4px 10px;
         font-size: 11px;
         font-weight: 600;
+        min-height: 24px;
     }
     QPushButton#QueueActionBtn:hover {
         background-color: #e2e8f0;
         border-color: #94a3b8;
         color: #0f172a;
+    }
+
+    /* Table & Inline Action Buttons */
+    QPushButton#TableActionBtnOpen {
+        background-color: #f0f9ff;
+        color: #0284c7;
+        border: 1px solid #bae6fd;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 10px;
+        min-height: 24px;
+        max-height: 26px;
+    }
+    QPushButton#TableActionBtnOpen:hover {
+        background-color: #0284c7;
+        border-color: #0284c7;
+        color: #ffffff;
+    }
+    QPushButton#TableActionBtnOpen:disabled {
+        background-color: #f8fafc;
+        color: #94a3b8;
+        border-color: #e2e8f0;
+    }
+
+    QPushButton#TableActionBtnFolder {
+        background-color: #fefce8;
+        color: #d97706;
+        border: 1px solid #fde68a;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 10px;
+        min-height: 24px;
+        max-height: 26px;
+    }
+    QPushButton#TableActionBtnFolder:hover {
+        background-color: #d97706;
+        border-color: #d97706;
+        color: #ffffff;
+    }
+    QPushButton#TableActionBtnFolder:disabled {
+        background-color: #f8fafc;
+        color: #94a3b8;
+        border-color: #e2e8f0;
+    }
+
+    QPushButton#TableActionBtnDelete {
+        background-color: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 8px;
+        min-height: 24px;
+        max-height: 26px;
+        min-width: 24px;
+    }
+    QPushButton#TableActionBtnDelete:hover {
+        background-color: #dc2626;
+        border-color: #dc2626;
+        color: #ffffff;
     }
 
     QPushButton#IconButton {
