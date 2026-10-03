@@ -1,0 +1,272 @@
+import uuid
+from typing import Dict, Any, List, Optional
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QTabWidget, QMessageBox, QSplitter, QFrame
+)
+from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject
+from PySide6.QtGui import QIcon
+
+from ..core.config import AppConfig
+from ..core.sanitizer import URLSanitizer
+from ..core.extractor import MediaMetadataExtractor
+from ..core.downloader import DownloadTask
+from ..core.ffmpeg_mgr import FFmpegManager
+from .theme import Theme
+from .components import (
+    URLInputBar, PreviewCard, OptionsPanel, PlaylistView,
+    QueueWidget, HistoryWidget, SettingsDialog
+)
+
+
+class MetadataFetchSignals(QObject):
+    success = Signal(dict)
+    error = Signal(str)
+
+
+class MetadataFetchRunnable(QRunnable):
+    def __init__(self, url: str):
+        super().__init__()
+        self.url = url
+        self.signals = MetadataFetchSignals()
+
+    def run(self):
+        try:
+            info = MediaMetadataExtractor.extract_info(self.url)
+            self.signals.success.emit(info)
+        except Exception as e:
+            self.signals.error.emit(str(e))
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("ApexLoad - YouTube Downloader & Converter")
+        self.resize(980, 720)
+        self.setMinimumSize(850, 600)
+
+        self.cfg = AppConfig.get_instance()
+        self.current_metadata: Optional[Dict[str, Any]] = None
+        self.thread_pool = QThreadPool.globalInstance()
+
+        self._setup_ui()
+        self._apply_theme(self.cfg.get("theme", "dark"))
+
+    def _setup_ui(self):
+        central_widget = QWidget()
+        central_widget.setObjectName("CentralWidget")
+        self.setCentralWidget(central_widget)
+
+        root_layout = QVBoxLayout(central_widget)
+        root_layout.setContentsMargins(18, 14, 18, 14)
+        root_layout.setSpacing(14)
+
+        # 1. Header Bar
+        header = QHBoxLayout()
+        header.setSpacing(10)
+
+        logo_layout = QHBoxLayout()
+        logo_layout.setSpacing(8)
+        logo_icon = QLabel("⚡")
+        logo_icon.setStyleSheet("font-size: 20px;")
+        logo_title = QLabel("ApexLoad")
+        logo_title.setObjectName("HeaderTitle")
+        logo_version = QLabel("v1.0.0")
+        logo_version.setObjectName("Badge")
+
+        logo_layout.addWidget(logo_icon)
+        logo_layout.addWidget(logo_title)
+        logo_layout.addWidget(logo_version)
+
+        header.addLayout(logo_layout)
+        header.addStretch()
+
+        # Engine Status
+        ffmpeg_avail = FFmpegManager.is_available()
+        self.engine_status = QLabel("● FFmpeg Ready" if ffmpeg_avail else "▲ FFmpeg Missing")
+        self.engine_status.setObjectName("StatusSuccess" if ffmpeg_avail else "StatusError")
+
+        # Theme toggle button
+        self.btn_theme_toggle = QPushButton("🌙" if self.cfg.get("theme", "dark") == "dark" else "☀️")
+        self.btn_theme_toggle.setObjectName("IconButton")
+        self.btn_theme_toggle.setToolTip("Toggle Dark/Light Mode")
+        self.btn_theme_toggle.clicked.connect(self._toggle_theme)
+
+        # Settings button
+        self.btn_settings = QPushButton("⚙")
+        self.btn_settings.setObjectName("IconButton")
+        self.btn_settings.setToolTip("Settings")
+        self.btn_settings.clicked.connect(self._open_settings)
+
+        header.addWidget(self.engine_status)
+        header.addWidget(self.btn_theme_toggle)
+        header.addWidget(self.btn_settings)
+
+        root_layout.addLayout(header)
+
+        # 2. URL Input Bar
+        self.url_bar = URLInputBar()
+        self.url_bar.fetch_requested.connect(self._on_fetch_requested)
+        root_layout.addWidget(self.url_bar)
+
+        # 3. Main Navigation Tabs
+        self.tabs = QTabWidget()
+
+        # Tab 1: Single Video & Downloader Hub
+        tab_downloader = QWidget()
+        down_layout = QVBoxLayout(tab_downloader)
+        down_layout.setContentsMargins(8, 12, 8, 8)
+        down_layout.setSpacing(12)
+
+        # Preview Card
+        self.preview_card = PreviewCard()
+        self.preview_card.mode_changed.connect(self._on_preview_mode_changed)
+        down_layout.addWidget(self.preview_card)
+
+        # Options Panel
+        self.options_panel = OptionsPanel()
+        self.options_panel.download_now_requested.connect(self._on_download_now)
+        self.options_panel.add_queue_requested.connect(self._on_add_to_queue)
+        self.options_panel.options_changed.connect(self.preview_card.update_estimated_size)
+        down_layout.addWidget(self.options_panel)
+
+        # Active Queue Preview inside Downloader tab
+        down_layout.addWidget(QLabel("Current Downloads:"))
+        self.queue_widget = QueueWidget()
+        self.queue_widget.task_finished_signal.connect(self._on_task_finished)
+        down_layout.addWidget(self.queue_widget, 1)
+
+        self.tabs.addTab(tab_downloader, "📥 Downloader")
+
+        # Tab 2: Playlist Inspector
+        self.playlist_view = PlaylistView()
+        self.playlist_view.download_selected_requested.connect(self._on_playlist_download_selected)
+        self.tabs.addTab(self.playlist_view, "📑 Playlist Inspector")
+
+        # Tab 3: History
+        self.history_widget = HistoryWidget()
+        self.tabs.addTab(self.history_widget, "🕒 History")
+
+        root_layout.addWidget(self.tabs, 1)
+
+    def _apply_theme(self, theme_name: str):
+        stylesheet = Theme.get_stylesheet(theme_name)
+        self.setStyleSheet(stylesheet)
+        self.btn_theme_toggle.setText("🌙" if theme_name == "dark" else "☀️")
+
+    def _toggle_theme(self):
+        curr = self.cfg.get("theme", "dark")
+        new_theme = "light" if curr == "dark" else "dark"
+        self.cfg.set("theme", new_theme)
+        self._apply_theme(new_theme)
+
+    def _open_settings(self):
+        dlg = SettingsDialog(self)
+        dlg.theme_changed.connect(self._apply_theme)
+        if dlg.exec():
+            # Update FFmpeg status badge
+            ffmpeg_avail = FFmpegManager.is_available()
+            self.engine_status.setText("● FFmpeg Ready" if ffmpeg_avail else "▲ FFmpeg Missing")
+            self.engine_status.setObjectName("StatusSuccess" if ffmpeg_avail else "StatusError")
+            self.engine_status.setStyleSheet("")
+
+    def _on_fetch_requested(self, url: str):
+        self.url_bar.set_loading(True)
+        runnable = MetadataFetchRunnable(url)
+        runnable.signals.success.connect(self._on_metadata_success)
+        runnable.signals.error.connect(self._on_metadata_error)
+        self.thread_pool.start(runnable)
+
+    def _on_metadata_success(self, data: Dict[str, Any]):
+        self.url_bar.set_loading(False)
+        self.current_metadata = data
+
+        is_playlist = (data.get("type") == "playlist")
+
+        # Update preview card
+        self.preview_card.set_metadata(data)
+        self.options_panel.set_metadata(data)
+
+        if is_playlist:
+            self.playlist_view.load_playlist(data)
+            self.tabs.setCurrentWidget(self.playlist_view)
+        else:
+            self.tabs.setCurrentIndex(0)
+
+    def _on_metadata_error(self, error_msg: str):
+        self.url_bar.set_loading(False)
+        QMessageBox.warning(
+            self,
+            "Failed to Fetch Information",
+            f"Could not retrieve video or playlist information.\n\nDetails:\n{error_msg}"
+        )
+
+    def _on_preview_mode_changed(self, mode: str):
+        if mode == "playlist" and self.current_metadata:
+            self.tabs.setCurrentWidget(self.playlist_view)
+
+    def _on_download_now(self, options: Dict[str, Any]):
+        self._queue_current_media(options, switch_to_queue=True)
+
+    def _on_add_to_queue(self, options: Dict[str, Any]):
+        self._queue_current_media(options, switch_to_queue=False)
+
+    def _queue_current_media(self, options: Dict[str, Any], switch_to_queue: bool = False):
+        if not self.current_metadata:
+            QMessageBox.information(self, "No Video", "Please fetch a valid YouTube video or playlist first.")
+            return
+
+        # Check if playlist
+        if self.current_metadata.get("type") == "playlist":
+            entries = self.current_metadata.get("entries", [])
+            selected = [e for e in entries if e.get("selected", True)]
+            if not selected:
+                QMessageBox.warning(self, "No Items Selected", "Please select at least one video to download.")
+                return
+            self._download_entries(selected, options)
+            return
+
+        # Single video
+        task = DownloadTask(
+            task_id=str(uuid.uuid4()),
+            url=self.current_metadata.get("original_url") or "",
+            media_type=options["media_type"],
+            format_choice=options["format_choice"],
+            quality_choice=options["quality_choice"],
+            save_path=options["save_path"],
+            title=self.current_metadata.get("title", "Video"),
+            thumbnail_url=self.current_metadata.get("thumbnail", ""),
+            embed_thumbnail=options.get("embed_thumbnail", True),
+            embed_metadata=options.get("embed_metadata", True),
+            embed_subtitles=options.get("embed_subtitles", False),
+            snip_start=options.get("snip_start"),
+            snip_end=options.get("snip_end"),
+            split_chapters=options.get("split_chapters", False),
+        )
+
+        self.queue_widget.add_task(task)
+
+    def _on_playlist_download_selected(self, selected_entries: List[Dict[str, Any]]):
+        options = self.options_panel.get_options_payload()
+        self._download_entries(selected_entries, options)
+        self.tabs.setCurrentIndex(0)  # Switch back to Downloader tab with queue
+
+    def _download_entries(self, entries: List[Dict[str, Any]], options: Dict[str, Any]):
+        for entry in entries:
+            task = DownloadTask(
+                task_id=str(uuid.uuid4()),
+                url=entry.get("url") or f"https://www.youtube.com/watch?v={entry.get('id')}",
+                media_type=options["media_type"],
+                format_choice=options["format_choice"],
+                quality_choice=options["quality_choice"],
+                save_path=options["save_path"],
+                title=entry.get("title", "Video"),
+                thumbnail_url=entry.get("thumbnail", ""),
+                embed_thumbnail=options.get("embed_thumbnail", True),
+                embed_metadata=options.get("embed_metadata", True),
+                embed_subtitles=options.get("embed_subtitles", False),
+            )
+            self.queue_widget.add_task(task)
+
+    def _on_task_finished(self, task: DownloadTask):
+        self.history_widget.refresh()
