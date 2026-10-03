@@ -36,13 +36,22 @@ class AppUpdater:
                 tag = data.get("tag_name", "").lstrip("v")
                 body = data.get("body", "No release notes provided.")
 
-                # Look for executable asset
+                # Look for executable asset: prefer portable for direct in-place update, otherwise setup
                 download_url = ""
+                portable_url = ""
+                setup_url = ""
                 for asset in data.get("assets", []):
                     name = asset.get("name", "").lower()
+                    url = asset.get("browser_download_url", "")
                     if name.endswith(".exe"):
-                        download_url = asset.get("browser_download_url")
-                        break
+                        if "portable" in name:
+                            portable_url = url
+                        elif "setup" in name or "installer" in name:
+                            setup_url = url
+                        elif not download_url:
+                            download_url = url
+
+                download_url = portable_url or setup_url or download_url
 
                 if tag:
                     try:

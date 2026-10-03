@@ -1,12 +1,19 @@
 ; ytfetch Inno Setup Script
 ; Generates standard Windows installer with Start Menu and Desktop shortcuts
 
-#define MyAppName "ytfetch"
+#ifndef MyAppVersion
 #define MyAppVersion "1.0.0"
+#endif
+
+#define MyAppName "ytfetch"
 #define MyAppPublisher "TOXiC-G"
 #define MyAppURL "https://github.com/TOXiC-G/ytfetch"
 #define MyAppExeName "ytfetch.exe"
 #define MyAppId "{{A123FE89-7711-4E6D-981D-FF903E78241A}"
+
+#ifndef OutputBaseFilename
+#define OutputBaseFilename "ytfetch-v" + MyAppVersion + "-setup"
+#endif
 
 [Setup]
 AppId={#MyAppId}
@@ -19,8 +26,8 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 DefaultGroupName={#MyAppName}
-OutputDir=..\dist\installer
-OutputBaseFilename=ytfetch-Setup-x64
+OutputDir=..\dist
+OutputBaseFilename={#OutputBaseFilename}
 SetupIconFile=ytfetch.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -39,8 +46,8 @@ Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "ytfetch.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\ytfetch.ico"; AppUserModelID: "TOXiC-G.ytfetch.Desktop.1.0"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\ytfetch.ico"; AppUserModelID: "TOXiC-G.ytfetch.Desktop.1.0"
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\ytfetch.ico"; AppUserModelID: "TOXiC-G.ytfetch.Desktop.{#MyAppVersion}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\ytfetch.ico"; AppUserModelID: "TOXiC-G.ytfetch.Desktop.{#MyAppVersion}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

@@ -1,19 +1,25 @@
-name: Build and Release ytfetch
+name: Test, Build and Release ytfetch
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (without v prefix, e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
 
 permissions:
   contents: write
 
 jobs:
-  build-windows:
+  build-and-release:
     runs-on: windows-latest
+
     steps:
-      - name: Checkout Source Code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Python 3.11
@@ -27,29 +33,66 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress
+      - name: Run Automated Tests
+        run: |
+          python -m unittest discover tests
 
-      - name: Build Executable with PyInstaller
+      - name: Determine Version
+        id: get_version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $ver = $env:GITHUB_REF_NAME.TrimStart("v")
+          } elseif ($env:INPUT_VERSION) {
+            $ver = $env:INPUT_VERSION.TrimStart("v")
+          } else {
+            $ver = "1.0.0"
+          }
+          Write-Host "Determined Version: $ver"
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --no-progress
+
+      - name: Build Standalone Executable with PyInstaller
         run: |
           pyinstaller ytfetch.spec --noconfirm
 
-      - name: Compile Inno Setup Installer
+      - name: Prepare Portable Artifacts
+        shell: pwsh
         run: |
-          iscc installer/installer.iss
+          $ver = "${{ steps.get_version.outputs.version }}"
+          # Copy to version-suffixed portable exe
+          Copy-Item -Path "dist/ytfetch.exe" -Destination "dist/ytfetch-v$ver-portable.exe"
+          
+          # Create zip archive containing portable executable and icon
+          Compress-Archive -Path "dist/ytfetch.exe", "src/assets/ytfetch.ico" -DestinationPath "dist/ytfetch-v$ver-portable-win64.zip"
 
-      - name: Create Portable Zip Archive
+      - name: Compile Inno Setup Windows Installer
+        shell: pwsh
         run: |
-          Compress-Archive -Path dist/ytfetch.exe, src/assets/ytfetch.ico -DestinationPath dist/ytfetch-portable-win64.zip
+          $ver = "${{ steps.get_version.outputs.version }}"
+          iscc /DMyAppVersion="$ver" installer/installer.iss
+
+      - name: Verify Release Assets
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "dist" -Filter "*.exe", "*.zip" | Select-Object Name, Length
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.get_version.outputs.version) }}
+          name: ${{ format('ytfetch v{0}', steps.get_version.outputs.version) }}
           files: |
-            dist/ytfetch.exe
-            dist/installer/ytfetch-Setup-x64.exe
-            dist/ytfetch-portable-win64.zip
+            dist/ytfetch-v*-setup.exe
+            dist/ytfetch-v*-portable.exe
+            dist/ytfetch-v*-portable-win64.zip
           draft: false
           prerelease: false
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
