@@ -1,11 +1,13 @@
 import uuid
 import threading
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTabWidget, QMessageBox, QProgressDialog, QStackedWidget
 )
 from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject, QTimer
+from PySide6.QtGui import QIcon
 
 from ..core.config import AppConfig
 from ..core.sanitizer import URLSanitizer

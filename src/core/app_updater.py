@@ -8,7 +8,7 @@ import requests
 from packaging import version
 
 
-CURRENT_VERSION = "1.0.1"
+CURRENT_VERSION = "1.0.2"
 GITHUB_REPO = "TOXiC-G/ytfetch"
 
 
