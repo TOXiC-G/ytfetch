@@ -1,21 +1,22 @@
 import uuid
+import threading
 from typing import Dict, Any, List, Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTabWidget, QMessageBox, QSplitter, QFrame
+    QTabWidget, QMessageBox, QProgressDialog
 )
-from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject, QTimer
 
 from ..core.config import AppConfig
 from ..core.sanitizer import URLSanitizer
 from ..core.extractor import MediaMetadataExtractor
 from ..core.downloader import DownloadTask
 from ..core.ffmpeg_mgr import FFmpegManager
+from ..core.app_updater import AppUpdater, CURRENT_VERSION
 from .theme import Theme
 from .components import (
     URLInputBar, PreviewCard, OptionsPanel, PlaylistView,
-    QueueWidget, HistoryWidget, SettingsDialog
+    QueueWidget, HistoryWidget, SettingsDialog, UpdateDialog
 )
 
 
@@ -39,18 +40,27 @@ class MetadataFetchRunnable(QRunnable):
 
 
 class MainWindow(QMainWindow):
+    update_detected = Signal(str, str, str)  # target_version, download_url, notes
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ApexLoad - YouTube Downloader & Converter")
-        self.resize(980, 720)
-        self.setMinimumSize(850, 600)
+        self.setWindowTitle(f"ytfetch - YouTube Downloader & Converter (v{CURRENT_VERSION})")
+        self.resize(1000, 740)
+        self.setMinimumSize(850, 620)
 
         self.cfg = AppConfig.get_instance()
         self.current_metadata: Optional[Dict[str, Any]] = None
         self.thread_pool = QThreadPool.globalInstance()
 
+        self.update_detected.connect(self._on_update_detected)
+        self.pending_update_data: Optional[Dict[str, str]] = None
+
         self._setup_ui()
         self._apply_theme(self.cfg.get("theme", "dark"))
+
+        # Schedule non-invasive update check 2 seconds after startup
+        if self.cfg.get("auto_check_updates", True):
+            QTimer.singleShot(2000, self._check_for_updates_silently)
 
     def _setup_ui(self):
         central_widget = QWidget()
@@ -69,9 +79,9 @@ class MainWindow(QMainWindow):
         logo_layout.setSpacing(8)
         logo_icon = QLabel("⚡")
         logo_icon.setStyleSheet("font-size: 20px;")
-        logo_title = QLabel("ApexLoad")
+        logo_title = QLabel("ytfetch")
         logo_title.setObjectName("HeaderTitle")
-        logo_version = QLabel("v1.0.0")
+        logo_version = QLabel(f"v{CURRENT_VERSION}")
         logo_version.setObjectName("Badge")
 
         logo_layout.addWidget(logo_icon)
@@ -81,10 +91,26 @@ class MainWindow(QMainWindow):
         header.addLayout(logo_layout)
         header.addStretch()
 
+        # Update Notice Button (Hidden by default, shown quietly if update found)
+        self.btn_update_notice = QPushButton("✨ Update Available")
+        self.btn_update_notice.setObjectName("UpdateNoticeButton")
+        self.btn_update_notice.setVisible(False)
+        self.btn_update_notice.clicked.connect(self._on_update_notice_clicked)
+        header.addWidget(self.btn_update_notice)
+
         # Engine Status
         ffmpeg_avail = FFmpegManager.is_available()
-        self.engine_status = QLabel("● FFmpeg Ready" if ffmpeg_avail else "▲ FFmpeg Missing")
+        self.engine_status = QPushButton("● FFmpeg Ready" if ffmpeg_avail else "▲ FFmpeg Missing")
         self.engine_status.setObjectName("StatusSuccess" if ffmpeg_avail else "StatusError")
+        self.engine_status.setStyleSheet("""
+            QPushButton {
+                font-size: 11px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: 6px;
+            }
+        """)
+        self.engine_status.clicked.connect(self._on_engine_status_clicked)
 
         # Theme toggle button
         self.btn_theme_toggle = QPushButton("🌙" if self.cfg.get("theme", "dark") == "dark" else "☀️")
@@ -160,15 +186,78 @@ class MainWindow(QMainWindow):
         self.cfg.set("theme", new_theme)
         self._apply_theme(new_theme)
 
+    def _check_for_updates_silently(self):
+        """Runs quiet non-blocking GitHub release check in the background."""
+        def worker():
+            is_newer, tag, url, body = AppUpdater.check_for_app_update()
+            if is_newer:
+                self.update_detected.emit(tag, url, body)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_update_detected(self, target_version: str, download_url: str, notes: str):
+        self.pending_update_data = {
+            "version": target_version,
+            "url": download_url,
+            "notes": notes
+        }
+        self.btn_update_notice.setText(f"✨ Update v{target_version}")
+        self.btn_update_notice.setVisible(True)
+
+    def _on_update_notice_clicked(self):
+        if self.pending_update_data:
+            dlg = UpdateDialog(
+                target_version=self.pending_update_data["version"],
+                download_url=self.pending_update_data["url"],
+                release_notes=self.pending_update_data["notes"],
+                parent=self
+            )
+            dlg.exec()
+
+    def _on_engine_status_clicked(self):
+        if not FFmpegManager.is_available():
+            reply = QMessageBox.question(
+                self,
+                "FFmpeg Missing",
+                "FFmpeg is required to mux video/audio and extract MP3s.\n\nWould you like ytfetch to automatically download and configure portable FFmpeg now?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                self._download_ffmpeg_interactive()
+        else:
+            self._open_settings()
+
+    def _download_ffmpeg_interactive(self):
+        progress = QProgressDialog("Downloading portable FFmpeg...", "Cancel", 0, 100, self)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+
+        def worker():
+            def cb(pct, text):
+                progress.setValue(pct)
+                progress.setLabelText(text)
+
+            ok, msg = FFmpegManager.download_portable(cb)
+            progress.close()
+            if ok:
+                QMessageBox.information(self, "FFmpeg Installed", "FFmpeg has been installed and configured successfully!")
+                self._update_engine_badge()
+            else:
+                QMessageBox.critical(self, "Download Failed", f"Could not install FFmpeg: {msg}")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _update_engine_badge(self):
+        ffmpeg_avail = FFmpegManager.is_available()
+        self.engine_status.setText("● FFmpeg Ready" if ffmpeg_avail else "▲ FFmpeg Missing")
+        self.engine_status.setObjectName("StatusSuccess" if ffmpeg_avail else "StatusError")
+        self.engine_status.setStyleSheet("")
+
     def _open_settings(self):
         dlg = SettingsDialog(self)
         dlg.theme_changed.connect(self._apply_theme)
         if dlg.exec():
-            # Update FFmpeg status badge
-            ffmpeg_avail = FFmpegManager.is_available()
-            self.engine_status.setText("● FFmpeg Ready" if ffmpeg_avail else "▲ FFmpeg Missing")
-            self.engine_status.setObjectName("StatusSuccess" if ffmpeg_avail else "StatusError")
-            self.engine_status.setStyleSheet("")
+            self._update_engine_badge()
 
     def _on_fetch_requested(self, url: str):
         self.url_bar.set_loading(True)
@@ -236,6 +325,7 @@ class MainWindow(QMainWindow):
             save_path=options["save_path"],
             title=self.current_metadata.get("title", "Video"),
             thumbnail_url=self.current_metadata.get("thumbnail", ""),
+            duration_formatted=self.current_metadata.get("duration_formatted", ""),
             embed_thumbnail=options.get("embed_thumbnail", True),
             embed_metadata=options.get("embed_metadata", True),
             embed_subtitles=options.get("embed_subtitles", False),
@@ -249,7 +339,7 @@ class MainWindow(QMainWindow):
     def _on_playlist_download_selected(self, selected_entries: List[Dict[str, Any]]):
         options = self.options_panel.get_options_payload()
         self._download_entries(selected_entries, options)
-        self.tabs.setCurrentIndex(0)  # Switch back to Downloader tab with queue
+        self.tabs.setCurrentIndex(0)
 
     def _download_entries(self, entries: List[Dict[str, Any]], options: Dict[str, Any]):
         for entry in entries:
@@ -262,6 +352,7 @@ class MainWindow(QMainWindow):
                 save_path=options["save_path"],
                 title=entry.get("title", "Video"),
                 thumbnail_url=entry.get("thumbnail", ""),
+                duration_formatted=entry.get("duration_formatted", ""),
                 embed_thumbnail=options.get("embed_thumbnail", True),
                 embed_metadata=options.get("embed_metadata", True),
                 embed_subtitles=options.get("embed_subtitles", False),

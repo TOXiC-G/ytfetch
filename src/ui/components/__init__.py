@@ -5,6 +5,7 @@ from .playlist_view import PlaylistView
 from .queue_widget import QueueWidget
 from .history_widget import HistoryWidget
 from .settings_dialog import SettingsDialog
+from .update_dialog import UpdateDialog
 
 __all__ = [
     "URLInputBar",
@@ -14,4 +15,5 @@ __all__ = [
     "QueueWidget",
     "HistoryWidget",
     "SettingsDialog",
+    "UpdateDialog",
 ]

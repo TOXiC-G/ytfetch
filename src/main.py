@@ -12,11 +12,12 @@ if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 
 from src.ui.main_window import MainWindow
+from src.core.app_updater import CURRENT_VERSION
 
 
 def create_default_icon() -> QIcon:
     """
-    Dynamically creates a high-res brand icon for ApexLoad if no .ico file is present.
+    Dynamically creates a high-res brand icon for ytfetch if no .ico file is present.
     """
     pixmap = QPixmap(128, 128)
     pixmap.fill(Qt.transparent)
@@ -28,7 +29,7 @@ def create_default_icon() -> QIcon:
     painter.setPen(Qt.NoPen)
     painter.drawRoundedRect(4, 4, 120, 120, 28, 28)
 
-    # Inner subtle glow
+    # Lightning bolt symbol
     painter.setBrush(QColor("#ffffff"))
     font = QFont("Segoe UI", 56, QFont.Bold)
     painter.setFont(font)
@@ -44,7 +45,7 @@ def main():
     if sys.platform == "win32":
         try:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "ApexLoad.YouTubeDownloader.Desktop.1.0"
+                f"TOXiC-G.ytfetch.Desktop.{CURRENT_VERSION}"
             )
         except Exception:
             pass
@@ -55,12 +56,15 @@ def main():
     )
 
     app = QApplication(sys.argv)
-    app.setApplicationName("ApexLoad")
-    app.setOrganizationName("ApexLoad")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationName("ytfetch")
+    app.setOrganizationName("TOXiC-G")
+    app.setApplicationVersion(CURRENT_VERSION)
 
     # Set icon
-    icon_path = Path(__file__).resolve().parent / "assets" / "apexload.ico"
+    icon_path = Path(__file__).resolve().parent / "assets" / "ytfetch.ico"
+    if not icon_path.exists():
+        icon_path = Path(__file__).resolve().parent / "assets" / "apexload.ico"
+
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
     else:

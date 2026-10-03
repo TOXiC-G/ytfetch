@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QWidget
 )
-from PySide6.QtCore import Qt, Signal, QByteArray
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from typing import Dict, Any, Optional
@@ -30,7 +30,7 @@ class PreviewCard(QFrame):
             QLabel {
                 background-color: #0b0c10;
                 border-radius: 8px;
-                border: 1px solid #272a38;
+                border: 1px solid rgba(120, 130, 150, 0.25);
             }
         """)
         self.thumb_label.setAlignment(Qt.AlignCenter)
@@ -41,18 +41,18 @@ class PreviewCard(QFrame):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(6)
 
+        # Video Title: Uses objectName PreviewTitle so theme stylesheet colors it properly in both Dark and Light mode
         self.title_label = QLabel("Media Title")
-        self.title_label.setObjectName("SectionTitle")
+        self.title_label.setObjectName("PreviewTitle")
         self.title_label.setWordWrap(True)
-        self.title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #ffffff;")
 
         # Badges row (Channel, Duration, Views)
         meta_row = QHBoxLayout()
         meta_row.setSpacing(8)
 
+        # Channel label: Uses objectName PreviewUploader for theme adaptive color
         self.uploader_label = QLabel("Channel")
-        self.uploader_label.setObjectName("MutedLabel")
-        self.uploader_label.setStyleSheet("font-weight: 600; color: #cbd5e1;")
+        self.uploader_label.setObjectName("PreviewUploader")
 
         self.duration_badge = QLabel("00:00")
         self.duration_badge.setObjectName("Badge")
@@ -62,7 +62,6 @@ class PreviewCard(QFrame):
 
         self.size_badge = QLabel("~0 MB")
         self.size_badge.setObjectName("Badge")
-        self.size_badge.setStyleSheet("background-color: #1e293b; color: #38bdf8;")
 
         meta_row.addWidget(self.uploader_label)
         meta_row.addWidget(self.duration_badge)
@@ -116,7 +115,7 @@ class PreviewCard(QFrame):
             count = data.get("entries_count", 0)
             self.duration_badge.setText(f"📑 {count} videos")
             self.views_badge.setVisible(False)
-            self.size_badge.setText(f"Playlist Preview")
+            self.size_badge.setText("Playlist Preview")
             self.mode_container.setVisible(False)
         else:
             self.duration_badge.setText(f"⏱ {data.get('duration_formatted', '00:00')}")
@@ -129,7 +128,6 @@ class PreviewCard(QFrame):
                 best_size_str = data["video_qualities"][0].get("filesize_formatted", "Auto size")
             self.size_badge.setText(f"💾 {best_size_str}")
 
-            # Check if this video is part of a playlist
             if "playlist_entries" in data or data.get("is_playlist_member"):
                 self.mode_container.setVisible(True)
             else:
@@ -164,9 +162,9 @@ class PreviewCard(QFrame):
                 )
                 self.thumb_label.setPixmap(scaled)
             else:
-                self.thumb_label.setText("Thumb Error")
+                self.thumb_label.setText("No Preview")
         else:
-            self.thumb_label.setText("Thumb Error")
+            self.thumb_label.setText("No Preview")
         reply.deleteLater()
 
     def _on_mode_toggled(self, checked: bool):

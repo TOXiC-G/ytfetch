@@ -5,6 +5,7 @@ from .extractor import MediaMetadataExtractor
 from .downloader import DownloadTask, DownloadWorker
 from .history import HistoryManager
 from .updater import EngineUpdater
+from .app_updater import AppUpdater, CURRENT_VERSION
 
 __all__ = [
     "AppConfig",
@@ -15,4 +16,6 @@ __all__ = [
     "DownloadWorker",
     "HistoryManager",
     "EngineUpdater",
+    "AppUpdater",
+    "CURRENT_VERSION",
 ]

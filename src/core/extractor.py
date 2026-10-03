@@ -33,9 +33,23 @@ class MediaMetadataExtractor:
             opts["extract_flat"] = "in_playlist"
             opts["playlistend"] = 100  # Cap initial preview for responsiveness
 
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(clean_url, download=False)
-            return cls._process_info(info, clean_url)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(clean_url, download=False)
+                return cls._process_info(info, clean_url)
+        except Exception as e:
+            raw = str(e)
+            if "HTTP Error 403" in raw:
+                raise RuntimeError("YouTube blocked metadata request (403 Forbidden). Try updating the yt-dlp engine in Settings.")
+            elif "Private video" in raw:
+                raise RuntimeError("This video is private and cannot be accessed.")
+            elif "Video unavailable" in raw:
+                raise RuntimeError("Video is unavailable or has been removed.")
+            elif "Sign in to confirm" in raw:
+                raise RuntimeError("YouTube anti-bot verification encountered. Please try again shortly.")
+            elif "is not a valid URL" in raw or "Unsupported URL" in raw:
+                raise RuntimeError("Invalid or unsupported URL. Please paste a valid YouTube video or playlist link.")
+            raise RuntimeError(raw)
 
     @classmethod
     def _process_info(cls, info: Dict[str, Any], url: str) -> Dict[str, Any]:

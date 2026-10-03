@@ -14,7 +14,7 @@ class Theme:
     }
 
     /* Cards and Surfaces */
-    QFrame#Card, QFrame#PreviewCard, QFrame#OptionsCard, QFrame#QueueItemCard {
+    QFrame#Card, QFrame#PreviewCard, QFrame#OptionsCard {
         background-color: #171923;
         border: 1px solid #272a38;
         border-radius: 12px;
@@ -22,6 +22,26 @@ class Theme:
 
     QFrame#Card:hover, QFrame#PreviewCard:hover {
         border-color: #3b3f52;
+    }
+
+    /* Queue Item Card */
+    QFrame#QueueItemCard {
+        background-color: #161822;
+        border: 1px solid #262938;
+        border-radius: 10px;
+    }
+    QFrame#QueueItemCard:hover {
+        border-color: #383c50;
+        background-color: #1a1c28;
+    }
+
+    /* Scroll Area fixes */
+    QScrollArea {
+        background-color: transparent;
+        border: none;
+    }
+    QScrollArea > QWidget > QWidget {
+        background-color: transparent;
     }
 
     /* Headers and Labels */
@@ -38,6 +58,21 @@ class Theme:
         font-size: 14px;
         font-weight: 600;
         color: #e2e8f0;
+    }
+    QLabel#PreviewTitle {
+        font-size: 15px;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    QLabel#PreviewUploader {
+        font-size: 13px;
+        font-weight: 600;
+        color: #cbd5e1;
+    }
+    QLabel#QueueItemTitle {
+        font-size: 13px;
+        font-weight: 600;
+        color: #ffffff;
     }
     QLabel#MutedLabel {
         color: #94a3b8;
@@ -140,7 +175,7 @@ class Theme:
         border-color: #1e2230;
     }
 
-    /* Primary Accent Button */
+    /* Primary Radiant Button */
     QPushButton#PrimaryButton {
         background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e11d48, stop:1 #f43f5e);
         color: #ffffff;
@@ -156,7 +191,7 @@ class Theme:
         background-color: #be123c;
     }
 
-    /* Secondary Accent Button (e.g. Add to queue) */
+    /* Secondary Accent Button */
     QPushButton#SecondaryAccentButton {
         background-color: #1e293b;
         color: #38bdf8;
@@ -170,7 +205,36 @@ class Theme:
         color: #ffffff;
     }
 
-    /* Icon Buttons / Tiny Buttons */
+    /* Update Available Glowing Button */
+    QPushButton#UpdateNoticeButton {
+        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #a855f7);
+        color: #ffffff;
+        border: 1px solid #c084fc;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 12px;
+    }
+    QPushButton#UpdateNoticeButton:hover {
+        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #9333ea, stop:1 #c084fc);
+    }
+
+    /* Action Pill Buttons (for Queue items) */
+    QPushButton#QueueActionBtn {
+        background-color: #212534;
+        color: #e2e8f0;
+        border: 1px solid #33384c;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    QPushButton#QueueActionBtn:hover {
+        background-color: #2c3246;
+        border-color: #49516d;
+        color: #ffffff;
+    }
+
     QPushButton#IconButton {
         background-color: transparent;
         border: 1px solid transparent;
@@ -186,14 +250,14 @@ class Theme:
     QProgressBar {
         background-color: #11131a;
         border: 1px solid #272a38;
-        border-radius: 6px;
-        height: 10px;
+        border-radius: 5px;
+        height: 8px;
         text-align: center;
         color: transparent;
     }
     QProgressBar::chunk {
-        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e11d48, stop:1 #38bdf8);
-        border-radius: 5px;
+        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e11d48, stop:0.5 #ec4899, stop:1 #38bdf8);
+        border-radius: 4px;
     }
 
     /* Tabs */
@@ -254,14 +318,14 @@ class Theme:
     /* Scrollbars */
     QScrollBar:vertical {
         background: #0f1117;
-        width: 10px;
+        width: 8px;
         margin: 0px;
-        border-radius: 5px;
+        border-radius: 4px;
     }
     QScrollBar::handle:vertical {
         background: #272a38;
         min-height: 25px;
-        border-radius: 5px;
+        border-radius: 4px;
     }
     QScrollBar::handle:vertical:hover {
         background: #3b3f52;
@@ -314,7 +378,7 @@ class Theme:
     }
 
     /* Cards and Surfaces */
-    QFrame#Card, QFrame#PreviewCard, QFrame#OptionsCard, QFrame#QueueItemCard {
+    QFrame#Card, QFrame#PreviewCard, QFrame#OptionsCard {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
@@ -322,6 +386,26 @@ class Theme:
 
     QFrame#Card:hover, QFrame#PreviewCard:hover {
         border-color: #cbd5e1;
+    }
+
+    /* Queue Item Card */
+    QFrame#QueueItemCard {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+    }
+    QFrame#QueueItemCard:hover {
+        border-color: #cbd5e1;
+        background-color: #fcfdfe;
+    }
+
+    /* Scroll Area fixes */
+    QScrollArea {
+        background-color: transparent;
+        border: none;
+    }
+    QScrollArea > QWidget > QWidget {
+        background-color: transparent;
     }
 
     /* Headers and Labels */
@@ -338,6 +422,21 @@ class Theme:
         font-size: 14px;
         font-weight: 600;
         color: #1e293b;
+    }
+    QLabel#PreviewTitle {
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    QLabel#PreviewUploader {
+        font-size: 13px;
+        font-weight: 600;
+        color: #475569;
+    }
+    QLabel#QueueItemTitle {
+        font-size: 13px;
+        font-weight: 600;
+        color: #0f172a;
     }
     QLabel#MutedLabel {
         color: #64748b;
@@ -440,7 +539,7 @@ class Theme:
         border-color: #e2e8f0;
     }
 
-    /* Primary Accent Button */
+    /* Primary Button */
     QPushButton#PrimaryButton {
         background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e11d48, stop:1 #f43f5e);
         color: #ffffff;
@@ -470,18 +569,59 @@ class Theme:
         color: #ffffff;
     }
 
+    /* Update Notice Button */
+    QPushButton#UpdateNoticeButton {
+        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7c3aed, stop:1 #8b5cf6);
+        color: #ffffff;
+        border: 1px solid #a78bfa;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 12px;
+    }
+    QPushButton#UpdateNoticeButton:hover {
+        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6d28d9, stop:1 #7c3aed);
+    }
+
+    /* Action Pill Buttons (for Queue items) */
+    QPushButton#QueueActionBtn {
+        background-color: #f1f5f9;
+        color: #334155;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    QPushButton#QueueActionBtn:hover {
+        background-color: #e2e8f0;
+        border-color: #94a3b8;
+        color: #0f172a;
+    }
+
+    QPushButton#IconButton {
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 5px;
+    }
+    QPushButton#IconButton:hover {
+        background-color: #e2e8f0;
+        border-color: #cbd5e1;
+    }
+
     /* Progress Bar */
     QProgressBar {
         background-color: #e2e8f0;
         border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        height: 10px;
+        border-radius: 5px;
+        height: 8px;
         text-align: center;
         color: transparent;
     }
     QProgressBar::chunk {
-        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e11d48, stop:1 #0284c7);
-        border-radius: 5px;
+        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e11d48, stop:0.5 #ec4899, stop:1 #0284c7);
+        border-radius: 4px;
     }
 
     /* Tabs */
@@ -508,6 +648,70 @@ class Theme:
         color: #0f172a;
         border-color: #cbd5e1;
         border-bottom: 2px solid #e11d48;
+    }
+
+    /* CheckBoxes & RadioButtons */
+    QCheckBox, QRadioButton {
+        spacing: 8px;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    QCheckBox::indicator, QRadioButton::indicator {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        border: 1.5px solid #cbd5e1;
+        background-color: #ffffff;
+    }
+    QRadioButton::indicator {
+        border-radius: 9px;
+    }
+    QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+        border-color: #e11d48;
+    }
+    QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+        background-color: #e11d48;
+        border-color: #e11d48;
+    }
+
+    /* Scrollbars */
+    QScrollBar:vertical {
+        background: #f8fafc;
+        width: 8px;
+        margin: 0px;
+        border-radius: 4px;
+    }
+    QScrollBar::handle:vertical {
+        background: #cbd5e1;
+        min-height: 25px;
+        border-radius: 4px;
+    }
+    QScrollBar::handle:vertical:hover {
+        background: #94a3b8;
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+
+    /* Tables */
+    QTableWidget {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        gridline-color: #f1f5f9;
+        color: #0f172a;
+        selection-background-color: #e0f2fe;
+        selection-color: #0f172a;
+    }
+    QHeaderView::section {
+        background-color: #f8fafc;
+        color: #64748b;
+        padding: 8px;
+        border: none;
+        border-bottom: 1px solid #e2e8f0;
+        font-weight: 600;
+        font-size: 12px;
     }
 
     /* Banner / Toast */

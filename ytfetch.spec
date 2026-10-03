@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 datas = [
-    ('src/assets/apexload.ico', 'src/assets'),
+    ('src/assets/ytfetch.ico', 'src/assets'),
 ]
 
 datas += collect_data_files('yt_dlp')
@@ -19,6 +19,8 @@ hiddenimports = [
     'mutagen',
     'PIL',
     'sqlite3',
+    'packaging',
+    'requests',
 ]
 hiddenimports += collect_submodules('yt_dlp')
 
@@ -47,7 +49,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='ApexLoad',
+    name='ytfetch',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -59,5 +61,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='src/assets/apexload.ico',
+    icon='src/assets/ytfetch.ico',
 )

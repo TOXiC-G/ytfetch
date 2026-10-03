@@ -1,10 +1,11 @@
-import uuid
 from typing import Dict, List, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar,
-    QScrollArea, QFrame
+    QScrollArea, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt, QRunnable, QThreadPool, QObject
+from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 from ...core.downloader import DownloadTask, DownloadWorker
 from ...core.history import HistoryManager
@@ -46,19 +47,41 @@ class QueueItemWidget(QFrame):
         super().__init__(parent)
         self.task = task
         self.setObjectName("QueueItemCard")
+        self.net_manager = QNetworkAccessManager(self)
         self._setup_ui()
+        if self.task.thumbnail_url:
+            self._load_thumbnail(self.task.thumbnail_url)
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(12, 10, 12, 10)
+        main_layout.setSpacing(12)
 
-        # Header Row: Title + Format Badge + Status Badge
-        header = QHBoxLayout()
-        header.setSpacing(8)
+        # 1. Left: Compact Thumbnail Preview (84x48)
+        self.thumb_label = QLabel()
+        self.thumb_label.setFixedSize(84, 48)
+        self.thumb_label.setStyleSheet("""
+            QLabel {
+                background-color: #0b0c10;
+                border-radius: 6px;
+                border: 1px solid rgba(120, 130, 150, 0.2);
+            }
+        """)
+        self.thumb_label.setAlignment(Qt.AlignCenter)
+        self.thumb_label.setText("🎬" if self.task.media_type == "video" else "🎵")
+        main_layout.addWidget(self.thumb_label)
+
+        # 2. Middle: Title, Progress Bar, Metrics
+        middle_layout = QVBoxLayout()
+        middle_layout.setSpacing(5)
+
+        # Top line: Title + Chips
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
 
         self.title_lbl = QLabel(self.task.title)
-        self.title_lbl.setStyleSheet("font-weight: 600; font-size: 13px; color: #ffffff;")
+        self.title_lbl.setObjectName("QueueItemTitle")
+        self.title_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.title_lbl.setWordWrap(False)
 
         fmt_text = f"{self.task.format_choice.upper()} {self.task.quality_choice}"
@@ -68,50 +91,99 @@ class QueueItemWidget(QFrame):
         self.status_badge = QLabel("Queued")
         self.status_badge.setObjectName("Badge")
 
-        header.addWidget(self.title_lbl, 1)
-        header.addWidget(self.fmt_badge)
-        header.addWidget(self.status_badge)
-
-        layout.addLayout(header)
+        top_row.addWidget(self.title_lbl, 1)
+        top_row.addWidget(self.fmt_badge)
+        top_row.addWidget(self.status_badge)
+        middle_layout.addLayout(top_row)
 
         # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        layout.addWidget(self.progress_bar)
+        middle_layout.addWidget(self.progress_bar)
 
-        # Bottom info row: Speed, ETA, Size + Cancel/Open Buttons
-        bottom = QHBoxLayout()
-        bottom.setSpacing(10)
+        # Metrics row: Percent, Speed, ETA, Size
+        self.metrics_row = QHBoxLayout()
+        self.metrics_row.setSpacing(12)
 
-        self.info_lbl = QLabel("Waiting in queue...")
-        self.info_lbl.setObjectName("MutedLabel")
+        self.percent_lbl = QLabel("0%")
+        self.percent_lbl.setStyleSheet("font-weight: 700; font-size: 11px;")
+
+        self.speed_lbl = QLabel("⚡ -- MB/s")
+        self.speed_lbl.setObjectName("MutedLabel")
+
+        self.eta_lbl = QLabel("⏱ --:--")
+        self.eta_lbl.setObjectName("MutedLabel")
+
+        self.size_lbl = QLabel("💾 0 / 0 MB")
+        self.size_lbl.setObjectName("MutedLabel")
+
+        self.metrics_row.addWidget(self.percent_lbl)
+        self.metrics_row.addWidget(self.speed_lbl)
+        self.metrics_row.addWidget(self.eta_lbl)
+        self.metrics_row.addWidget(self.size_lbl)
+        self.metrics_row.addStretch()
+
+        middle_layout.addLayout(self.metrics_row)
+        main_layout.addLayout(middle_layout, 1)
+
+        # 3. Right: Action Buttons
+        self.action_layout = QVBoxLayout()
+        self.action_layout.setSpacing(4)
+        self.action_layout.setAlignment(Qt.AlignCenter)
 
         self.btn_open_file = QPushButton("▶ Open")
+        self.btn_open_file.setObjectName("QueueActionBtn")
         self.btn_open_file.setVisible(False)
         self.btn_open_file.clicked.connect(self._on_open_file)
 
         self.btn_open_folder = QPushButton("📁 Folder")
+        self.btn_open_folder.setObjectName("QueueActionBtn")
         self.btn_open_folder.setVisible(False)
         self.btn_open_folder.clicked.connect(self._on_open_folder)
 
         self.btn_cancel = QPushButton("✕ Cancel")
+        self.btn_cancel.setObjectName("QueueActionBtn")
         self.btn_cancel.clicked.connect(self._on_cancel)
 
-        bottom.addWidget(self.info_lbl, 1)
-        bottom.addWidget(self.btn_open_file)
-        bottom.addWidget(self.btn_open_folder)
-        bottom.addWidget(self.btn_cancel)
+        self.action_layout.addWidget(self.btn_open_file)
+        self.action_layout.addWidget(self.btn_open_folder)
+        self.action_layout.addWidget(self.btn_cancel)
 
-        layout.addLayout(bottom)
+        main_layout.addLayout(self.action_layout)
+
+    def _load_thumbnail(self, url: str):
+        req = QNetworkRequest(url)
+        reply = self.net_manager.get(req)
+        reply.finished.connect(lambda: self._on_thumb_reply(reply))
+
+    def _on_thumb_reply(self, reply: QNetworkReply):
+        if reply.error() == QNetworkReply.NoError:
+            img_data = reply.readAll()
+            image = QImage()
+            if image.loadFromData(img_data):
+                pixmap = QPixmap.fromImage(image)
+                scaled = pixmap.scaled(
+                    self.thumb_label.size(),
+                    Qt.KeepAspectRatioByExpanding,
+                    Qt.SmoothTransformation
+                )
+                self.thumb_label.setPixmap(scaled)
+        reply.deleteLater()
 
     def update_progress(self, data: dict):
         prog = int(data.get("progress", 0))
         self.progress_bar.setValue(prog)
+        self.percent_lbl.setText(f"{prog}%")
+
         speed = data.get("speed", "-- MB/s")
         eta = data.get("eta", "--:--")
         size = data.get("size", "")
-        self.info_lbl.setText(f"{prog}% | {speed} | ETA: {eta} | {size}")
+
+        self.speed_lbl.setText(f"⚡ {speed}")
+        self.eta_lbl.setText(f"⏱ {eta}")
+        if size:
+            self.size_lbl.setText(f"💾 {size}")
 
     def update_status(self, status: str):
         if status == "downloading":
@@ -120,12 +192,13 @@ class QueueItemWidget(QFrame):
         elif status == "converting":
             self.status_badge.setText("Converting...")
             self.status_badge.setStyleSheet("background-color: rgba(234, 179, 8, 0.15); color: #facc15;")
-            self.info_lbl.setText("Muxing and applying tags/artwork...")
+            self.speed_lbl.setText("Applying tags & muxing...")
         elif status == "finished":
             self.status_badge.setText("Completed")
             self.status_badge.setStyleSheet("background-color: rgba(16, 185, 129, 0.15); color: #34d399;")
             self.progress_bar.setValue(100)
-            self.info_lbl.setText("Finished")
+            self.percent_lbl.setText("100%")
+            self.speed_lbl.setText("Download complete")
             self.btn_cancel.setVisible(False)
             self.btn_open_file.setVisible(True)
             self.btn_open_folder.setVisible(True)
@@ -133,13 +206,13 @@ class QueueItemWidget(QFrame):
             self.status_badge.setText("Cancelled")
             self.status_badge.setStyleSheet("background-color: rgba(148, 163, 184, 0.15); color: #94a3b8;")
             self.btn_cancel.setEnabled(False)
-            self.info_lbl.setText("Cancelled by user")
+            self.speed_lbl.setText("Cancelled by user")
         elif status == "error":
-            self.status_badge.setText("Error")
+            self.status_badge.setText("Failed")
             self.status_badge.setStyleSheet("background-color: rgba(239, 68, 68, 0.15); color: #f87171;")
             self.btn_cancel.setEnabled(False)
-            err = self.task.error_message or "Download error occurred"
-            self.info_lbl.setText(err[:60] + "..." if len(err) > 60 else err)
+            err = self.task.error_message or "Download error"
+            self.speed_lbl.setText(err[:50] + "..." if len(err) > 50 else err)
 
     def _on_cancel(self):
         self.task.cancel()
@@ -180,7 +253,7 @@ class QueueWidget(QWidget):
 
         # Header with Clear Completed button
         header = QHBoxLayout()
-        self.queue_title = QLabel("Download Queue (0)")
+        self.queue_title = QLabel("Download Queue (0 active)")
         self.queue_title.setObjectName("SectionTitle")
 
         self.btn_clear_completed = QPushButton("Clear Completed")
@@ -196,24 +269,59 @@ class QueueWidget(QWidget):
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setStyleSheet("background: transparent;")
 
         self.scroll_content = QWidget()
+        self.scroll_content.setStyleSheet("background: transparent;")
         self.scroll_layout = QVBoxLayout(self.scroll_content)
         self.scroll_layout.setContentsMargins(0, 0, 0, 0)
         self.scroll_layout.setSpacing(8)
+
+        # Sleek Empty State placeholder
+        self.empty_placeholder = QFrame()
+        self.empty_placeholder.setObjectName("Card")
+        self.empty_placeholder.setStyleSheet("""
+            QFrame {
+                border: 1.5px dashed rgba(120, 130, 160, 0.25);
+                border-radius: 10px;
+                padding: 24px;
+            }
+        """)
+        empty_layout = QVBoxLayout(self.empty_placeholder)
+        empty_layout.setAlignment(Qt.AlignCenter)
+        empty_layout.setSpacing(6)
+
+        empty_icon = QLabel("📥")
+        empty_icon.setStyleSheet("font-size: 26px;")
+        empty_icon.setAlignment(Qt.AlignCenter)
+
+        empty_title = QLabel("No Active Downloads")
+        empty_title.setObjectName("SectionTitle")
+        empty_title.setAlignment(Qt.AlignCenter)
+
+        empty_sub = QLabel("Paste a YouTube link above and click Download Now or Add to Queue.")
+        empty_sub.setObjectName("MutedLabel")
+        empty_sub.setAlignment(Qt.AlignCenter)
+
+        empty_layout.addWidget(empty_icon)
+        empty_layout.addWidget(empty_title)
+        empty_layout.addWidget(empty_sub)
+
+        self.scroll_layout.addWidget(self.empty_placeholder)
         self.scroll_layout.addStretch()
 
         self.scroll.setWidget(self.scroll_content)
         layout.addWidget(self.scroll, 1)
 
     def add_task(self, task: DownloadTask):
+        self.empty_placeholder.setVisible(False)
         self.tasks[task.task_id] = task
 
         item_widget = QueueItemWidget(task)
         item_widget.cancel_requested.connect(self._on_task_cancelled)
         self.item_widgets[task.task_id] = item_widget
 
-        # Insert before stretch
+        # Insert right above stretch
         self.scroll_layout.insertWidget(self.scroll_layout.count() - 1, item_widget)
         self._update_title()
 
@@ -252,6 +360,7 @@ class QueueWidget(QWidget):
                 format_choice=task.format_choice,
                 file_path=task.output_file,
                 thumbnail_url=task.thumbnail_url,
+                duration=task.duration_formatted,
             )
             self.task_finished_signal.emit(task)
 
@@ -274,8 +383,13 @@ class QueueWidget(QWidget):
             self.tasks.pop(tid, None)
             self.runnables.pop(tid, None)
 
+        if not self.tasks:
+            self.empty_placeholder.setVisible(True)
+
         self._update_title()
 
     def _update_title(self):
         active_count = sum(1 for t in self.tasks.values() if t.status in ["queued", "downloading", "converting"])
         self.queue_title.setText(f"Download Queue ({active_count} active)")
+        if not self.tasks:
+            self.empty_placeholder.setVisible(True)

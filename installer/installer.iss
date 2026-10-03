@@ -1,12 +1,12 @@
-; ApexLoad Inno Setup Script
+; ytfetch Inno Setup Script
 ; Generates standard Windows installer with Start Menu and Desktop shortcuts
 
-#define MyAppName "ApexLoad"
+#define MyAppName "ytfetch"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "ApexLoad Open Source"
-#define MyAppURL "https://github.com/nathan/apexload"
-#define MyAppExeName "ApexLoad.exe"
-#define MyAppId "{{8B167E42-992F-4C23-8B33-F9E26384C1C4}"
+#define MyAppPublisher "TOXiC-G"
+#define MyAppURL "https://github.com/TOXiC-G/ytfetch"
+#define MyAppExeName "ytfetch.exe"
+#define MyAppId "{{A123FE89-7711-4E6D-981D-FF903E78241A}"
 
 [Setup]
 AppId={#MyAppId}
@@ -20,8 +20,8 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 DefaultGroupName={#MyAppName}
 OutputDir=..\dist\installer
-OutputBaseFilename=ApexLoad-Setup-x64
-SetupIconFile=apexload.ico
+OutputBaseFilename=ytfetch-Setup-x64
+SetupIconFile=ytfetch.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -35,13 +35,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\ApexLoad\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\ApexLoad\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "apexload.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "ytfetch.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\apexload.ico"; AppUserModelID: "ApexLoad.YouTubeDownloader.Desktop.1.0"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\apexload.ico"; AppUserModelID: "ApexLoad.YouTubeDownloader.Desktop.1.0"
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\ytfetch.ico"; AppUserModelID: "TOXiC-G.ytfetch.Desktop.1.0"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\ytfetch.ico"; AppUserModelID: "TOXiC-G.ytfetch.Desktop.1.0"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

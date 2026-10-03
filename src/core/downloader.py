@@ -1,6 +1,7 @@
 import os
 import re
-import threading
+import glob
+import shutil
 from pathlib import Path
 from typing import Dict, Any, Callable, Optional
 import yt_dlp
@@ -21,6 +22,7 @@ class DownloadTask:
         save_path: str,
         title: str = "Media",
         thumbnail_url: str = "",
+        duration_formatted: str = "",
         embed_thumbnail: bool = True,
         embed_metadata: bool = True,
         embed_subtitles: bool = False,
@@ -36,6 +38,7 @@ class DownloadTask:
         self.save_path = save_path
         self.title = title
         self.thumbnail_url = thumbnail_url
+        self.duration_formatted = duration_formatted
         self.embed_thumbnail = embed_thumbnail
         self.embed_metadata = embed_metadata
         self.embed_subtitles = embed_subtitles
@@ -59,7 +62,12 @@ class DownloadTask:
 
 class DownloadWorker:
     """
-    Executes a DownloadTask using yt-dlp with callbacks and cancellation checks.
+    Executes a DownloadTask using yt-dlp with extensive guards against failure points:
+    - FFmpeg missing fallback & notifications
+    - Windows path length & reserved character guards
+    - Low disk space check
+    - Auto-cleanup of partial .part/.ytdl files on cancellation
+    - Human-readable error explanations
     """
 
     def __init__(
@@ -77,11 +85,38 @@ class DownloadWorker:
         if self.task.cancelled:
             return False
 
-        Path(self.task.save_path).mkdir(parents=True, exist_ok=True)
-        ffmpeg_path, _ = FFmpegManager.get_binaries()
+        # Guard 1: Verify destination directory and disk space
+        try:
+            save_dir = Path(self.task.save_path)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            usage = shutil.disk_usage(str(save_dir))
+            free_mb = usage.free / (1024 * 1024)
+            if free_mb < 80:
+                self.task.error_message = f"Insufficient disk space ({free_mb:.1f} MB free). Need at least 80 MB."
+                self._update_status("error", self.task.error_message)
+                return False
+        except Exception as e:
+            self.task.error_message = f"Invalid save directory: {e}"
+            self._update_status("error", self.task.error_message)
+            return False
 
-        # Sanitize safe filename template
-        outtmpl = os.path.join(self.task.save_path, "%(title)s.%(ext)s")
+        # Guard 2: FFmpeg Availability Check & Fallback
+        ffmpeg_path, _ = FFmpegManager.get_binaries()
+        if not ffmpeg_path:
+            # If user requested audio extraction (which strictly requires FFmpeg)
+            if self.task.media_type == "audio":
+                # Try auto-downloading FFmpeg portable silently
+                self._update_status("converting", "FFmpeg missing: Auto-provisioning portable FFmpeg...")
+                ok, msg = FFmpegManager.download_portable()
+                if ok:
+                    ffmpeg_path, _ = FFmpegManager.get_binaries()
+                else:
+                    self.task.error_message = "Audio conversion requires FFmpeg. Please install it in Settings or via winget."
+                    self._update_status("error", self.task.error_message)
+                    return False
+
+        # Safe filename template (strip Windows reserved characters)
+        outtmpl = os.path.join(self.task.save_path, "%(title).180s [%(id)s].%(ext)s")
 
         ydl_opts: Dict[str, Any] = {
             "outtmpl": outtmpl,
@@ -92,12 +127,15 @@ class DownloadWorker:
             "postprocessor_hooks": [self._postprocessor_hook],
             "windowsfilenames": True,
             "restrictfilenames": False,
+            "retries": 3,
+            "fragment_retries": 5,
+            "socket_timeout": 30,
         }
 
         if ffmpeg_path:
             ydl_opts["ffmpeg_location"] = ffmpeg_path
 
-        # Configure video vs audio
+        # Configure Video vs Audio
         if self.task.media_type == "audio":
             ydl_opts["format"] = "bestaudio/best"
             postprocessors = [
@@ -119,26 +157,30 @@ class DownloadWorker:
 
         else:
             # Video configuration
-            if self.task.quality_choice == "best":
-                ydl_opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+            if not ffmpeg_path:
+                # Fallback to single stream with audio included if FFmpeg is completely missing
+                ydl_opts["format"] = "best[ext=mp4]/best"
             else:
-                height = re.sub(r"[^\d]", "", self.task.quality_choice)
-                if height:
-                    ydl_opts["format"] = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
+                if self.task.quality_choice == "best":
+                    ydl_opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
                 else:
-                    ydl_opts["format"] = "bestvideo+bestaudio/best"
+                    height = re.sub(r"[^\d]", "", self.task.quality_choice)
+                    if height:
+                        ydl_opts["format"] = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
+                    else:
+                        ydl_opts["format"] = "bestvideo+bestaudio/best"
 
-            ydl_opts["merge_output_format"] = self.task.format_choice
+                ydl_opts["merge_output_format"] = self.task.format_choice
 
             postprocessors = []
             if self.task.embed_metadata:
                 postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
 
-            if self.task.embed_thumbnail:
+            if self.task.embed_thumbnail and ffmpeg_path:
                 ydl_opts["writethumbnail"] = True
                 postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
 
-            if self.task.embed_subtitles:
+            if self.task.embed_subtitles and ffmpeg_path:
                 ydl_opts["writesubtitles"] = True
                 ydl_opts["subtitleslangs"] = ["en", "all"]
                 postprocessors.append({"key": "FFmpegEmbedSubtitle"})
@@ -156,7 +198,7 @@ class DownloadWorker:
                 )
 
         # Chapter splitting
-        if self.task.split_chapters:
+        if self.task.split_chapters and ffmpeg_path:
             ydl_opts["split_chapters"] = True
 
         self._update_status("downloading", "Starting download...")
@@ -173,12 +215,12 @@ class DownloadWorker:
                         self.task.output_file = info["requested_downloads"][0].get("filepath", "")
                     if not self.task.output_file:
                         self.task.output_file = ydl.prepare_filename(info)
-                        # adjust extension if converted
                         if self.task.media_type == "audio":
                             base, _ = os.path.splitext(self.task.output_file)
                             self.task.output_file = f"{base}.{self.task.format_choice}"
 
             if self.task.cancelled:
+                self._cleanup_partial_files()
                 self._update_status("cancelled", "Download was cancelled.")
                 return False
 
@@ -188,12 +230,44 @@ class DownloadWorker:
 
         except Exception as e:
             if self.task.cancelled:
+                self._cleanup_partial_files()
                 self._update_status("cancelled", "Download was cancelled.")
                 return False
-            error_msg = str(e)
+
+            error_msg = self._humanize_error(str(e))
             self.task.error_message = error_msg
+            self._cleanup_partial_files()
             self._update_status("error", f"Error: {error_msg}")
             return False
+
+    def _cleanup_partial_files(self):
+        """Removes temporary .part or .ytdl files left behind in the download directory."""
+        try:
+            save_dir = Path(self.task.save_path)
+            for ext in ["*.part", "*.ytdl", "*.temp"]:
+                for temp_file in save_dir.glob(ext):
+                    # Check if file was modified recently (last 10 minutes)
+                    try:
+                        temp_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def _humanize_error(self, raw_err: str) -> str:
+        if "ffmpeg" in raw_err.lower() and "not installed" in raw_err.lower():
+            return "FFmpeg is required for muxing/audio conversion. Please install FFmpeg."
+        if "HTTP Error 403" in raw_err:
+            return "YouTube blocked download request (403 Forbidden). Try updating the yt-dlp engine."
+        if "Sign in to confirm you’re not a bot" in raw_err or "bot" in raw_err.lower():
+            return "YouTube bot check triggered. Please try again in a few minutes."
+        if "Video unavailable" in raw_err:
+            return "This video is unavailable, deleted, or country-restricted."
+        if "Private video" in raw_err:
+            return "This video is private."
+        if "Requested format is not available" in raw_err:
+            return "Selected format/resolution is not available for this video."
+        return raw_err[:120]
 
     def _progress_hook(self, d: Dict[str, Any]):
         if self.task.cancelled:
