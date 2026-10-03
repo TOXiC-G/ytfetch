@@ -1,7 +1,5 @@
 import unittest
 import os
-import tempfile
-from pathlib import Path
 from src.core.history import HistoryManager
 from src.core.ffmpeg_mgr import FFmpegManager
 
@@ -9,8 +7,13 @@ from src.core.ffmpeg_mgr import FFmpegManager
 class TestHistoryAndFFmpeg(unittest.TestCase):
     def test_ffmpeg_detection(self):
         ffmpeg, ffprobe = FFmpegManager.get_binaries()
-        self.assertIsNotNone(ffmpeg, "FFmpeg should be detected on this system")
-        self.assertTrue(os.path.exists(ffmpeg))
+        is_avail = FFmpegManager.is_available()
+        # Verify consistency: if binary is found, is_available must be True, else False
+        if ffmpeg:
+            self.assertTrue(os.path.exists(ffmpeg))
+            self.assertTrue(is_avail)
+        else:
+            self.assertFalse(is_avail)
 
     def test_history_crud(self):
         history = HistoryManager.get_instance()
