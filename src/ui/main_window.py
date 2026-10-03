@@ -364,6 +364,7 @@ class MainWindow(QMainWindow):
             snip_start=options.get("snip_start"),
             snip_end=options.get("snip_end"),
             split_chapters=options.get("split_chapters", False),
+            format_id=options.get("format_id"),
         )
 
         self.queue_widget.add_task(task)

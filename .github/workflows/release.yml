@@ -61,6 +61,17 @@ jobs:
         run: |
           pyinstaller ytfetch.spec --noconfirm
 
+      - name: Download Portable FFmpeg for Bundling
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_extracted"
+          $ffmpegExe = (Get-ChildItem -Path "ffmpeg_extracted" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1).FullName
+          $ffprobeExe = (Get-ChildItem -Path "ffmpeg_extracted" -Filter "ffprobe.exe" -Recurse | Select-Object -First 1).FullName
+          New-Item -ItemType Directory -Path "dist/bin" -Force | Out-Null
+          Copy-Item $ffmpegExe -Destination "dist/bin/ffmpeg.exe"
+          Copy-Item $ffprobeExe -Destination "dist/bin/ffprobe.exe"
+
       - name: Prepare Portable Artifacts
         shell: pwsh
         run: |
@@ -68,8 +79,8 @@ jobs:
           # Copy to version-suffixed portable exe
           Copy-Item -Path "dist/ytfetch.exe" -Destination "dist/ytfetch-v$ver-portable.exe"
           
-          # Create zip archive containing portable executable and icon
-          Compress-Archive -Path "dist/ytfetch.exe", "src/assets/ytfetch.ico" -DestinationPath "dist/ytfetch-v$ver-portable-win64.zip"
+          # Create zip archive containing portable executable, bundled FFmpeg bin, and icon
+          Compress-Archive -Path "dist/ytfetch.exe", "dist/bin", "src/assets/ytfetch.ico" -DestinationPath "dist/ytfetch-v$ver-portable-win64.zip"
 
       - name: Compile Inno Setup Windows Installer
         shell: pwsh

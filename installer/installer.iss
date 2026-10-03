@@ -2,7 +2,7 @@
 ; Generates standard Windows installer with Start Menu and Desktop shortcuts
 
 #ifndef MyAppVersion
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.4"
 #endif
 
 #define MyAppName "ytfetch"
@@ -44,6 +44,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "ytfetch.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\bin\ffmpeg.exe"; DestDir: "{app}\bin"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\dist\bin\ffprobe.exe"; DestDir: "{app}\bin"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\ytfetch.ico"; AppUserModelID: "TOXiC-G.ytfetch.Desktop.{#MyAppVersion}"

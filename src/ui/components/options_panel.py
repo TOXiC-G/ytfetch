@@ -308,9 +308,13 @@ class OptionsPanel(QFrame):
         qdata = self.combo_quality.currentData() or {}
 
         quality_choice = "best"
+        format_id = None
         if is_video:
+            tier = qdata.get("tier")
             h = qdata.get("height")
-            quality_choice = "best" if (not h or h == 9999) else str(h)
+            format_id = qdata.get("format_id")
+            val = tier or h
+            quality_choice = "best" if (not val or val == 9999) else str(val)
         else:
             quality_choice = qdata.get("bitrate", "320k")
 
@@ -326,6 +330,7 @@ class OptionsPanel(QFrame):
             "media_type": "video" if is_video else "audio",
             "format_choice": self.combo_format.currentText().lower(),
             "quality_choice": quality_choice,
+            "format_id": format_id,
             "save_path": final_save_path,
             "embed_thumbnail": self.chk_thumb.isChecked(),
             "embed_metadata": self.chk_meta.isChecked(),

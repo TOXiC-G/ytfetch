@@ -1,3 +1,4 @@
+import sys
 import os
 import shutil
 import subprocess
@@ -36,7 +37,20 @@ class FFmpegManager:
                 if ffmpeg.exists():
                     return str(ffmpeg), str(ffprobe) if ffprobe.exists() else None
 
-        # 1. Local ytfetch AppData bin
+        # 1. Application Directory / Bundled bin
+        app_candidates = [
+            Path(sys.executable).parent / "bin",
+            Path(sys.executable).parent,
+            Path(__file__).resolve().parent.parent.parent / "bin",
+            Path(__file__).resolve().parent.parent.parent / "dist" / "bin",
+        ]
+        for app_dir in app_candidates:
+            cand = app_dir / "ffmpeg.exe"
+            if cand.exists() and cls._verify_binary(str(cand)):
+                ffprobe_cand = app_dir / "ffprobe.exe"
+                return str(cand), str(ffprobe_cand) if ffprobe_cand.exists() else None
+
+        # 2. Local ytfetch AppData bin
         local_bin = cfg.app_dir / "bin"
         local_ffmpeg = local_bin / "ffmpeg.exe"
         local_ffprobe = local_bin / "ffprobe.exe"

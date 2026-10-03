@@ -29,12 +29,14 @@ class DownloadTask:
         snip_start: Optional[str] = None,
         snip_end: Optional[str] = None,
         split_chapters: bool = False,
+        format_id: Optional[str] = None,
     ):
         self.task_id = task_id
         self.url = url
         self.media_type = media_type
         self.format_choice = format_choice.lower()
         self.quality_choice = quality_choice
+        self.format_id = format_id
         self.save_path = save_path
         self.title = title
         self.thumbnail_url = thumbnail_url
@@ -100,17 +102,15 @@ class DownloadWorker:
             self._update_status("error", self.task.error_message)
             return False
 
-        # Guard 2: FFmpeg Availability Check & Fallback
+        # Guard 2: FFmpeg Availability Check & Auto-provision (for both audio and video)
         ffmpeg_path, _ = FFmpegManager.get_binaries()
         if not ffmpeg_path:
-            # If user requested audio extraction (which strictly requires FFmpeg)
-            if self.task.media_type == "audio":
-                # Try auto-downloading FFmpeg portable silently
-                self._update_status("converting", "FFmpeg missing: Auto-provisioning portable FFmpeg...")
-                ok, msg = FFmpegManager.download_portable()
-                if ok:
-                    ffmpeg_path, _ = FFmpegManager.get_binaries()
-                else:
+            self._update_status("converting", "FFmpeg missing: Auto-provisioning portable FFmpeg...")
+            ok, msg = FFmpegManager.download_portable()
+            if ok:
+                ffmpeg_path, _ = FFmpegManager.get_binaries()
+            else:
+                if self.task.media_type == "audio":
                     self.task.error_message = "Audio conversion requires FFmpeg. Please install it in Settings or via winget."
                     self._update_status("error", self.task.error_message)
                     return False
@@ -161,12 +161,15 @@ class DownloadWorker:
                 # Fallback to single stream with audio included if FFmpeg is completely missing
                 ydl_opts["format"] = "best[ext=mp4]/best"
             else:
-                if self.task.quality_choice == "best":
+                if getattr(self.task, "format_id", None) and self.task.format_id not in ("best", "bestvideo+bestaudio/best"):
+                    fid = self.task.format_id
+                    ydl_opts["format"] = f"{fid}+bestaudio/bestvideo+bestaudio/best"
+                elif self.task.quality_choice == "best":
                     ydl_opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
                 else:
                     height = re.sub(r"[^\d]", "", self.task.quality_choice)
                     if height:
-                        ydl_opts["format"] = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
+                        ydl_opts["format"] = f"bestvideo[height<={height}]+bestaudio/bestvideo+bestaudio/best"
                     else:
                         ydl_opts["format"] = "bestvideo+bestaudio/best"
 
@@ -266,7 +269,9 @@ class DownloadWorker:
         if "Private video" in raw_err:
             return "This video is private."
         if "Requested format is not available" in raw_err:
-            return "Selected format/resolution is not available for this video."
+            if not FFmpegManager.is_available():
+                return "FFmpeg is required to merge separate video and audio streams for this video. Please click '▲ FFmpeg Missing' at the top to install it."
+            return "Selected resolution/format is not available for this video. Try 'Best Available'."
         return raw_err[:120]
 
     def _progress_hook(self, d: Dict[str, Any]):

@@ -1,5 +1,5 @@
 import math
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import yt_dlp
 
 from .sanitizer import URLSanitizer
@@ -121,15 +121,52 @@ class MediaMetadataExtractor:
         }
 
     @classmethod
+    def get_resolution_tier(cls, width: Optional[int], height: Optional[int]) -> Tuple[int, str]:
+        """
+        Maps video dimensions to canonical standard tiers (4K, 1440p, 1080p, 720p, etc.)
+        taking widescreen/anamorphic cropping and vertical shorts into account.
+        """
+        w = width or 0
+        h = height or 0
+        if not w and not h:
+            return 0, "Unknown"
+
+        if h > w and w > 0:
+            # Vertical (Shorts/Reels): tier corresponds to horizontal width (e.g. 1080x1920 is 1080p)
+            effective_h = w
+        else:
+            # Landscape / Cinematic widescreen (e.g. 1920x1012): scale width to equivalent 16:9 height
+            effective_h = max(h, int(w * 9 / 16)) if w > 0 else h
+
+        if effective_h >= 2000 or w >= 3600:
+            return 2160, "4K (2160p)"
+        elif effective_h >= 1350 or w >= 2400:
+            return 1440, "1440p (2K)"
+        elif effective_h >= 950 or w >= 1800:
+            return 1080, "1080p (Full HD)"
+        elif effective_h >= 650 or w >= 1200:
+            return 720, "720p (HD)"
+        elif effective_h >= 430 or w >= 800:
+            return 480, "480p"
+        elif effective_h >= 320 or w >= 600:
+            return 360, "360p"
+        elif effective_h >= 200 or w >= 400:
+            return 240, "240p"
+        else:
+            return 144, "144p"
+
+    @classmethod
     def _parse_video_qualities(cls, formats: List[Dict[str, Any]], duration: int) -> List[Dict[str, Any]]:
-        # Map target heights
-        height_map = {}
+        # Map target standard resolution tiers
+        tier_map = {}
         for f in formats:
             height = f.get("height")
+            width = f.get("width")
             vcodec = f.get("vcodec", "none")
-            if not height or vcodec == "none":
+            if (not height and not width) or vcodec == "none":
                 continue
-            
+
+            tier, tier_name = cls.get_resolution_tier(width, height)
             fps = f.get("fps") or 30
             filesize = f.get("filesize") or f.get("filesize_approx")
             vbr = f.get("vbr") or 0
@@ -140,10 +177,31 @@ class MediaMetadataExtractor:
                 bitrate_kbps = tbr if tbr > 0 else (vbr + 128)
                 filesize = int((bitrate_kbps * 1000 / 8) * duration)
 
-            if height not in height_map or (filesize and filesize > (height_map[height].get("filesize") or 0)):
-                height_map[height] = {
-                    "height": height,
-                    "label": f"{height}p" + (f" {fps}fps" if fps and fps >= 50 else ""),
+            fps_str = f" {fps}fps" if fps and fps >= 50 else ""
+            label = f"{tier_name}{fps_str}"
+
+            # Pick the best stream for this tier (prefer higher pixel count, MP4 container, or higher bitrate)
+            is_better = False
+            if tier not in tier_map:
+                is_better = True
+            else:
+                existing = tier_map[tier]
+                curr_px = (width or 0) * (height or 0)
+                exist_px = (existing.get("width") or 0) * (existing.get("height") or 0)
+                if curr_px > exist_px:
+                    is_better = True
+                elif curr_px == exist_px:
+                    if f.get("ext") == "mp4" and existing.get("ext") != "mp4":
+                        is_better = True
+                    elif (filesize or 0) > (existing.get("filesize") or 0):
+                        is_better = True
+
+            if is_better:
+                tier_map[tier] = {
+                    "tier": tier,
+                    "height": height or tier,
+                    "width": width,
+                    "label": label,
                     "fps": fps,
                     "format_id": f.get("format_id"),
                     "filesize": filesize,
@@ -151,12 +209,14 @@ class MediaMetadataExtractor:
                     "ext": f.get("ext", "mp4")
                 }
 
-        # Sort descending by resolution
-        sorted_qualities = sorted(height_map.values(), key=lambda x: x["height"], reverse=True)
+        # Sort descending by resolution tier
+        sorted_qualities = sorted(tier_map.values(), key=lambda x: x["tier"], reverse=True)
         # Add "Best Available" at top
         best_size = sorted_qualities[0]["filesize"] if sorted_qualities else None
         res = [{
+            "tier": 9999,
             "height": 9999,
+            "width": 9999,
             "label": "Best Available",
             "fps": 60,
             "format_id": "bestvideo+bestaudio/best",
