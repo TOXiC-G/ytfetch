@@ -49,22 +49,31 @@ class FFmpegManager:
         if ffmpeg and cls._verify_binary(ffmpeg):
             return ffmpeg, ffprobe
 
-        # 3. Check WinGet Packages directory
+        # 3. Check WinGet Packages directory (scoped to *FFmpeg* packages)
         winget_path = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
         if winget_path.exists():
-            for exe in winget_path.glob("**/ffmpeg.exe"):
-                if cls._verify_binary(str(exe)):
-                    ffprobe_cand = exe.parent / "ffprobe.exe"
-                    return str(exe), str(ffprobe_cand) if ffprobe_cand.exists() else None
+            for pkg in winget_path.glob("*FFmpeg*"):
+                for exe in pkg.glob("**/ffmpeg.exe"):
+                    if cls._verify_binary(str(exe)):
+                        ffprobe_cand = exe.parent / "ffprobe.exe"
+                        return str(exe), str(ffprobe_cand) if ffprobe_cand.exists() else None
 
-        # 4. Check Program Files / common places
-        for base in [os.environ.get("ProgramFiles", "C:\\Program Files"), os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")]:
-            if not base:
-                continue
-            for cand in Path(base).glob("**/ffmpeg.exe"):
-                if cls._verify_binary(str(cand)):
-                    ffprobe_cand = cand.parent / "ffprobe.exe"
-                    return str(cand), str(ffprobe_cand) if ffprobe_cand.exists() else None
+        # 4. Check known standard install locations
+        known_dirs = [
+            Path("C:\\ffmpeg\\bin"),
+            Path("C:\\ffmpeg"),
+            Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "ffmpeg" / "bin",
+            Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "ffmpeg",
+            Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "ffmpeg" / "bin",
+            Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "ffmpeg",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "ffmpeg" / "bin",
+            Path(os.environ.get("ChocolateyInstall", "C:\\ProgramData\\chocolatey")) / "bin",
+        ]
+        for kdir in known_dirs:
+            exe = kdir / "ffmpeg.exe"
+            if exe.exists() and cls._verify_binary(str(exe)):
+                ffprobe_cand = kdir / "ffprobe.exe"
+                return str(exe), str(ffprobe_cand) if ffprobe_cand.exists() else None
 
         return None, None
 
